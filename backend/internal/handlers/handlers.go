@@ -11,6 +11,7 @@ import (
 	"log"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 
@@ -939,6 +940,26 @@ func (h *Handler) RunTreasuryAgent(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) Run() error {
 	_, err := h.runTreasuryAgentInternal("", false)
 	return err
+}
+
+func (h *Handler) ListChainEvents(w http.ResponseWriter, r *http.Request) {
+	ctx := context.Background()
+	limit := 50
+	if v := strings.TrimSpace(r.URL.Query().Get("limit")); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 && n <= 200 {
+			limit = n
+		}
+	}
+	var events []models.ChainEvent
+	if err := h.DB.NewSelect().
+		Model(&events).
+		Order("created_at DESC").
+		Limit(limit).
+		Scan(ctx); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to list chain events")
+		return
+	}
+	writeJSON(w, http.StatusOK, events)
 }
 
 func (h *Handler) SolanaWalletBalance(w http.ResponseWriter, r *http.Request) {

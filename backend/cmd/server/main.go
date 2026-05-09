@@ -86,6 +86,7 @@ func runServer() {
 		r.Get("/onchain/config", h.OnchainConfig)
 		r.Post("/webhooks/helius", h.HeliusWebhook)
 		r.Get("/blinks/actions", h.ListBlinkActions)
+		r.Get("/chain-events", h.ListChainEvents)
 
 		r.Group(func(r chi.Router) {
 			r.Use(auth.Middleware(h.Auth))
