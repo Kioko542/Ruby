@@ -7,7 +7,8 @@ Backend API for the Ruby app, covering authentication, group/vault operations, t
 - Language: Go 1.22
 - Router: Chi v5
 - Database: Postgres + Bun ORM
-- Realtime: WebSocket stream (`/api/v1/ws`)
+- Realtime: WebSocket stream (`/api/v1/ws`) — Render and other HTTPS hosts support `wss://` upgrades on the same service URL.
+- Helius: see [docs/HELIUS.md](./docs/HELIUS.md) for webhook URL, headers, and payload shapes.
 - Auth: Privy token verification + Phantom signed-message fallback
 - Web3: Solana RPC + Anchor IDL-aware tx-plan builder
 

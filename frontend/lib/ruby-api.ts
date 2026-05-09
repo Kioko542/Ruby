@@ -187,6 +187,98 @@ export function eventsWebSocketUrl(groupId?: string): string {
   return `${base.replace(/\/api\/v1$/, "")}/api/v1/ws${q}`;
 }
 
+export type GroupCycleResponse = {
+  group_id: string;
+  vault_balance: number;
+  active_cycle: number;
+  cycle_deadline?: string;
+  payout_ready: boolean;
+  last_settled_cycle: number;
+  cycle_contribution: number;
+  settlements: unknown[];
+  settlement_note?: string;
+};
+
+export type YieldEventRow = {
+  id: number;
+  group_id: string;
+  amount_deposited: number;
+  protocol: string;
+  apy: number;
+  tx_signature: string;
+  created_at: string;
+};
+
+export type GroupYieldResponse = {
+  group_id: string;
+  event_count: number;
+  total_deposited: number;
+  events: YieldEventRow[];
+};
+
+export type Web3BalanceResponse = {
+  address: string;
+  lamports: number;
+  sol: number;
+  solana_rpc_url: string;
+};
+
+export type BlinkActionRow = {
+  id: string;
+  blink_type: string;
+  group_id: string;
+  member_id: string;
+  payload: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export async function fetchGroupCycle(groupId: string): Promise<GroupCycleResponse> {
+  const res = await fetch(`${API_BASE}/groups/${encodeURIComponent(groupId)}/cycle`);
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json() as Promise<GroupCycleResponse>;
+}
+
+export async function fetchGroupYield(groupId: string): Promise<GroupYieldResponse> {
+  const res = await fetch(`${API_BASE}/groups/${encodeURIComponent(groupId)}/yield`);
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json() as Promise<GroupYieldResponse>;
+}
+
+export async function fetchMemberCreditScore(groupId: string, memberId: string): Promise<{ credit_score: number }> {
+  const res = await fetch(
+    `${API_BASE}/groups/${encodeURIComponent(groupId)}/members/${encodeURIComponent(memberId)}/credit-score`,
+  );
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json() as Promise<{ credit_score: number }>;
+}
+
+export async function fetchWeb3Balance(address: string): Promise<Web3BalanceResponse> {
+  const res = await fetch(`${API_BASE}/web3/balance?address=${encodeURIComponent(address)}`);
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json() as Promise<Web3BalanceResponse>;
+}
+
+export async function fetchBlinkActions(): Promise<BlinkActionRow[]> {
+  const res = await fetch(`${API_BASE}/blinks/actions`);
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json() as Promise<BlinkActionRow[]>;
+}
+
+export async function createBlink(
+  blinkType: "contribute" | "vote" | "withdraw",
+  body: { group_id: string; member_id?: string; payload?: Record<string, unknown> },
+): Promise<{ action_id: string; blink_type: string; url: string; status: string }> {
+  const res = await fetch(`${API_BASE}/blinks/${encodeURIComponent(blinkType)}/create`, {
+    method: "POST",
+    headers: headers(),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json() as Promise<{ action_id: string; blink_type: string; url: string; status: string }>;
+}
+
 export function lamportsToSol(lamports: number): string {
   return (lamports / 1_000_000_000).toLocaleString(undefined, {
     minimumFractionDigits: 2,

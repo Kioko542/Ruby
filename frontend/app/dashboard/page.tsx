@@ -1,11 +1,20 @@
 "use client";
 
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
-import { PublicKey } from "@solana/web3.js";
+import { Fragment, useCallback, useEffect, useState } from "react";
+import { Connection, PublicKey } from "@solana/web3.js";
+import { GroupInsightsPanel } from "@/components/dashboard/group-insights-panel";
 import { ProtectedRoute } from "@/components/auth/protected-route";
 import { useAuthStore } from "@/stores/auth-store";
 import { useRubyEventsWs } from "@/hooks/use-ruby-events-ws";
+import {
+  buildContributeInstruction,
+  buildJoinGroupInstruction,
+  deriveGroupPda,
+  explorerTxUrl,
+  getBrowserSolanaSigner,
+  signAndSendTransaction,
+} from "@/lib/ruby-anchor";
 import {
   buildTx,
   contribute,
@@ -17,7 +26,6 @@ import {
   type Group,
   type TxPlan,
 } from "@/lib/ruby-api";
-import { explorerTxUrl, signRubyMemoProof } from "@/lib/solana-memo-proof";
 import { useRouter } from "next/navigation";
 
 const RPC = process.env.NEXT_PUBLIC_SOLANA_RPC_URL ?? "https://api.devnet.solana.com";
@@ -33,6 +41,7 @@ function DashboardInner() {
   const [joinGroupId, setJoinGroupId] = useState("");
   const [joinInvite, setJoinInvite] = useState("");
   const [joinBusy, setJoinBusy] = useState(false);
+  const [expandedGroupId, setExpandedGroupId] = useState<string | null>(null);
 
   const { events, connected } = useRubyEventsWs(null);
 
@@ -110,14 +119,19 @@ function DashboardInner() {
     }
   };
 
-  const memoContribute = async (g: Group) => {
+  const anchorContribute = async (g: Group) => {
     if (!displayWallet) {
-      setErr("Wallet address required. Use Phantom login or Privy with an embedded wallet.");
+      setErr("Wallet address required.");
       return;
     }
-    const w = window as Window & { solana?: { signTransaction: (t: unknown) => Promise<unknown> } };
-    if (!w.solana?.signTransaction) {
-      setErr("Open this app in Phantom to sign a devnet memo transaction.");
+    const signer = getBrowserSolanaSigner();
+    if (!signer) {
+      setErr("Use Phantom on devnet to sign the contribute instruction.");
+      return;
+    }
+    const sessionPk = new PublicKey(displayWallet);
+    if (!sessionPk.equals(signer.publicKey)) {
+      setErr("Phantom active account must match your session wallet.");
       return;
     }
     const member = g.members?.find(
@@ -127,27 +141,39 @@ function DashboardInner() {
       setErr("Join this circle before contributing.");
       return;
     }
+    const groupPda = deriveGroupPda(g.id);
+    if (g.on_chain_pda && g.on_chain_pda !== groupPda.toBase58()) {
+      setErr("Group PDA does not match program derivation — check NEXT_PUBLIC_RUBY_PROGRAM_ID.");
+      return;
+    }
     setErr(null);
     try {
-      await previewContributeTx(g);
-      const pk = new PublicKey(displayWallet);
-      const { signature } = await signRubyMemoProof({
-        rpcUrl: RPC,
-        walletPublicKey: pk,
-        signTransaction: (tx) => w.solana!.signTransaction(tx) as Promise<import("@solana/web3.js").Transaction>,
-        memo: `Ruby contribute · ${g.id}`,
+      const onTime = g.cycle_deadline ? new Date(g.cycle_deadline) > new Date() : true;
+      const connection = new Connection(RPC, "confirmed");
+      const sig = await signAndSendTransaction({
+        connection,
+        feePayer: signer.publicKey,
+        signTransaction: signer.signTransaction,
+        instructions: [
+          buildContributeInstruction(signer.publicKey, groupPda, BigInt(g.contribution_amt), onTime),
+        ],
       });
       await contribute(g.id, {
         member_id: member.id,
         wallet_address: displayWallet,
         amount: g.contribution_amt,
         cycle_number: g.active_cycle || 1,
-        tx_signature: signature,
+        tx_signature: sig,
       });
       await load();
-      window.open(explorerTxUrl(signature), "_blank", "noopener,noreferrer");
+      window.open(explorerTxUrl(sig), "_blank", "noopener,noreferrer");
     } catch (e) {
-      setErr(e instanceof Error ? e.message : "Contribution flow failed");
+      const msg = e instanceof Error ? e.message : "Contribution failed";
+      setErr(
+        msg.includes("simulation") || msg.includes("custom program error")
+          ? `${msg} — ensure this circle was created with on-chain create_group and you joined with join_group on the same devnet program.`
+          : msg,
+      );
     }
   };
 
@@ -158,13 +184,35 @@ function DashboardInner() {
     }
     setJoinBusy(true);
     setErr(null);
+    const gid = joinGroupId.trim();
     try {
       const memberId = `m_${crypto.randomUUID().replace(/-/g, "").slice(0, 12)}`;
-      await joinGroup(joinGroupId.trim(), {
+      await joinGroup(gid, {
         member_id: memberId,
         wallet_address: displayWallet,
         ...(joinInvite.trim() ? { invite_code: joinInvite.trim() } : {}),
       });
+      try {
+        const signer = getBrowserSolanaSigner();
+        if (signer) {
+          const sessionPk = new PublicKey(displayWallet);
+          if (sessionPk.equals(signer.publicKey)) {
+            const groupPda = deriveGroupPda(gid);
+            await signAndSendTransaction({
+              connection: new Connection(RPC, "confirmed"),
+              feePayer: signer.publicKey,
+              signTransaction: signer.signTransaction,
+              instructions: [buildJoinGroupInstruction(signer.publicKey, groupPda)],
+            });
+          }
+        }
+      } catch (chainErr) {
+        setErr(
+          chainErr instanceof Error
+            ? `Saved to app; on-chain join_group error: ${chainErr.message} (skip if already on-chain).`
+            : "On-chain join error",
+        );
+      }
       setJoinGroupId("");
       setJoinInvite("");
       await load();
@@ -308,45 +356,72 @@ function DashboardInner() {
                   </tr>
                 </thead>
                 <tbody>
-                  {groups.map((g) => (
-                    <tr key={g.id} className="border-t border-[var(--border-strong)]">
-                      <td className="px-4 py-3 font-medium">{g.name}</td>
-                      <td className="px-4 py-3 font-mono text-xs">{g.id}</td>
-                      <td className="px-4 py-3">{g.members?.length ?? 0}</td>
-                      <td className="px-4 py-3">{lamportsToSol(g.vault_balance)}</td>
-                      <td className="px-4 py-3">
-                        {g.active_cycle}
-                        {g.cycle_deadline
-                          ? ` · due ${new Date(g.cycle_deadline).toLocaleDateString()}`
-                          : ""}
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex flex-wrap gap-2">
-                          <button
-                            type="button"
-                            className="rounded border border-[var(--border-strong)] px-2 py-1 text-xs hover:bg-slate-50"
-                            onClick={() => void openExplorer(g.id)}
-                          >
-                            Explorer
-                          </button>
-                          <button
-                            type="button"
-                            className="rounded border border-[var(--border-strong)] px-2 py-1 text-xs hover:bg-slate-50"
-                            onClick={() => void previewContributeTx(g)}
-                          >
-                            Tx plan
-                          </button>
-                          <button
-                            type="button"
-                            className="rounded bg-emerald-700 px-2 py-1 text-xs text-white hover:bg-emerald-600"
-                            onClick={() => void memoContribute(g)}
-                          >
-                            Memo + contribute
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
+                  {groups.map((g) => {
+                    const myMember = g.members?.find(
+                      (m) => displayWallet && m.wallet_address.toLowerCase() === displayWallet.toLowerCase(),
+                    );
+                    return (
+                      <Fragment key={g.id}>
+                        <tr className="border-t border-[var(--border-strong)]">
+                          <td className="px-4 py-3 font-medium">{g.name}</td>
+                          <td className="px-4 py-3 font-mono text-xs">{g.id}</td>
+                          <td className="px-4 py-3">{g.members?.length ?? 0}</td>
+                          <td className="px-4 py-3">{lamportsToSol(g.vault_balance)}</td>
+                          <td className="px-4 py-3">
+                            {g.active_cycle}
+                            {g.cycle_deadline
+                              ? ` · due ${new Date(g.cycle_deadline).toLocaleDateString()}`
+                              : ""}
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex flex-wrap gap-2">
+                              <button
+                                type="button"
+                                className="rounded border border-[var(--border-strong)] px-2 py-1 text-xs hover:bg-slate-50"
+                                onClick={() =>
+                                  setExpandedGroupId((id) => (id === g.id ? null : g.id))
+                                }
+                              >
+                                {expandedGroupId === g.id ? "Hide" : "Insights"}
+                              </button>
+                              <button
+                                type="button"
+                                className="rounded border border-[var(--border-strong)] px-2 py-1 text-xs hover:bg-slate-50"
+                                onClick={() => void openExplorer(g.id)}
+                              >
+                                Explorer
+                              </button>
+                              <button
+                                type="button"
+                                className="rounded border border-[var(--border-strong)] px-2 py-1 text-xs hover:bg-slate-50"
+                                onClick={() => void previewContributeTx(g)}
+                              >
+                                Tx plan
+                              </button>
+                              <button
+                                type="button"
+                                className="rounded bg-emerald-700 px-2 py-1 text-xs text-white hover:bg-emerald-600"
+                                onClick={() => void anchorContribute(g)}
+                              >
+                                Anchor contribute
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                        {expandedGroupId === g.id && (
+                          <tr className="border-t border-[var(--border-strong)]">
+                            <td colSpan={6} className="p-0">
+                              <GroupInsightsPanel
+                                group={g}
+                                walletAddress={displayWallet}
+                                memberId={myMember?.id ?? null}
+                              />
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

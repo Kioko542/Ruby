@@ -3,9 +3,20 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { Connection, PublicKey } from "@solana/web3.js";
 import { ProtectedRoute } from "@/components/auth/protected-route";
 import { useAuthStore } from "@/stores/auth-store";
-import { buildTx, createGroup, joinGroup, solToLamports } from "@/lib/ruby-api";
+import {
+  buildCreateGroupInstruction,
+  buildJoinGroupInstruction,
+  deriveGroupPda,
+  explorerTxUrl,
+  getBrowserSolanaSigner,
+  signAndSendTransaction,
+} from "@/lib/ruby-anchor";
+import { createGroup, joinGroup, solToLamports } from "@/lib/ruby-api";
+
+const RPC = process.env.NEXT_PUBLIC_SOLANA_RPC_URL ?? "https://api.devnet.solana.com";
 
 function CreateInner() {
   const router = useRouter();
@@ -33,8 +44,36 @@ function CreateInner() {
     setBusy(true);
     setLog(null);
     try {
+      const signer = getBrowserSolanaSigner();
+      if (!signer) {
+        setLog("Use Phantom (browser extension) on devnet to sign create_group + join_group.");
+        return;
+      }
+      const pk = new PublicKey(displayWallet);
+      if (!pk.equals(signer.publicKey)) {
+        setLog("Session wallet must match Phantom’s active account.");
+        return;
+      }
+
       const groupId = `g_${crypto.randomUUID().replace(/-/g, "").slice(0, 12)}`;
       const lamports = solToLamports(sol);
+      const groupPda = deriveGroupPda(groupId);
+      const connection = new Connection(RPC, "confirmed");
+
+      const chainSig = await signAndSendTransaction({
+        connection,
+        feePayer: signer.publicKey,
+        signTransaction: signer.signTransaction,
+        instructions: [
+          buildCreateGroupInstruction({
+            creator: signer.publicKey,
+            groupId,
+            contributionLamports: BigInt(lamports),
+            maxMembers,
+          }),
+          buildJoinGroupInstruction(signer.publicKey, groupPda),
+        ],
+      });
 
       await createGroup({
         id: groupId,
@@ -42,6 +81,7 @@ function CreateInner() {
         creator_wallet: displayWallet,
         contribution_amt: lamports,
         max_members: maxMembers,
+        on_chain_pda: groupPda.toBase58(),
       });
 
       const memberId = `m_${crypto.randomUUID().replace(/-/g, "").slice(0, 12)}`;
@@ -50,15 +90,10 @@ function CreateInner() {
         wallet_address: displayWallet,
       });
 
-      const plan = await buildTx("create-group", {
-        group_id: groupId,
-        wallet_address: displayWallet,
-        amount: lamports,
-      });
       setLog(
-        `Circle created and you joined as ${memberId}. Anchor plan: ${plan.instruction_name} (see dashboard for full JSON).`,
+        `On-chain circle initialized. Tx: ${chainSig}\nExplorer: ${explorerTxUrl(chainSig)}\nAPI member: ${memberId}`,
       );
-      setTimeout(() => router.replace("/dashboard"), 1200);
+      setTimeout(() => router.replace("/dashboard"), 1500);
     } catch (err) {
       setLog(err instanceof Error ? err.message : "Create failed");
     } finally {
@@ -74,14 +109,15 @@ function CreateInner() {
         </Link>
         <h1 className="mt-6 text-2xl font-semibold">Create a circle</h1>
         <p className="mt-2 text-sm text-[var(--muted)]">
-          Persists to Postgres via the API, joins your wallet, and fetches an Anchor{" "}
-          <code className="rounded bg-slate-100 px-1">create-group</code> tx plan.
+          Signs a real devnet transaction: <code className="rounded bg-slate-100 px-1">create_group</code> +{" "}
+          <code className="rounded bg-slate-100 px-1">join_group</code>, then syncs Postgres via the API.
         </p>
 
         {!displayWallet && (
           <p className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
-            No wallet on this session. Sign in with Phantom (recommended) or Privy with an embedded
-            Solana wallet so the API can attach you as a member.
+            No wallet on this session. You need a devnet-funded Phantom wallet: the create flow signs real{" "}
+            <code className="rounded bg-amber-100 px-1">create_group</code> +{" "}
+            <code className="rounded bg-amber-100 px-1">join_group</code> instructions before saving to the API.
           </p>
         )}
 

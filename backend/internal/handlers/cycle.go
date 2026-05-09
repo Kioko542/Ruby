@@ -42,15 +42,15 @@ func (h *Handler) GetGroupCycle(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
-		"group_id":            groupID,
-		"vault_balance":       group.VaultBalance,
-		"active_cycle":        group.ActiveCycle,
-		"cycle_deadline":      group.CycleDeadline,
-		"payout_ready":        group.PayoutReady,
-		"last_settled_cycle":  group.LastSettledCycle,
-		"cycle_contribution":  group.ContributionAmt,
-		"settlements":         settlements,
-		"mock_payout_note":    "Shares are computed pro-rata; on-chain payout is simulated for demo.",
+		"group_id":           groupID,
+		"vault_balance":      group.VaultBalance,
+		"active_cycle":       group.ActiveCycle,
+		"cycle_deadline":     group.CycleDeadline,
+		"payout_ready":       group.PayoutReady,
+		"last_settled_cycle": group.LastSettledCycle,
+		"cycle_contribution": group.ContributionAmt,
+		"settlements":        settlements,
+		"settlement_note":    "Off-chain cycle settlement preview; treasury payout wiring is product-specific.",
 	})
 }
 
