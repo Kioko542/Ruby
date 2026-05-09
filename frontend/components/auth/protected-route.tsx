@@ -9,10 +9,13 @@ interface ProtectedRouteProps {
 }
 
 export function ProtectedRoute({ children }: ProtectedRouteProps) {
-  const { isAuthenticated, isLoading, token, refreshSession } = useAuthStore();
+  const { hasHydrated, isAuthenticated, isLoading, token, refreshSession } = useAuthStore();
   const router = useRouter();
 
   useEffect(() => {
+    if (!hasHydrated) {
+      return;
+    }
     if (token) {
       void refreshSession();
       return;
@@ -20,9 +23,9 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
     if (!isAuthenticated) {
       router.push("/");
     }
-  }, [isAuthenticated, refreshSession, router, token]);
+  }, [hasHydrated, isAuthenticated, refreshSession, router, token]);
 
-  if (isLoading || !isAuthenticated) {
+  if (!hasHydrated || isLoading || !isAuthenticated) {
     return null;
   }
 

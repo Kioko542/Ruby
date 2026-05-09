@@ -23,6 +23,7 @@ interface AuthState {
   principal: AuthPrincipal | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  hasHydrated: boolean;
   error: string | null;
 }
 
@@ -33,6 +34,7 @@ interface AuthActions {
   refreshSession: () => Promise<void>;
   logout: () => Promise<void>;
   setLoading: (loading: boolean) => void;
+  setHasHydrated: (hasHydrated: boolean) => void;
 }
 
 type AuthStore = AuthState & AuthActions;
@@ -145,7 +147,11 @@ async function signWithPhantomWallet() {
 }
 
 async function signWithLocalDevWallet() {
-  if (process.env.NODE_ENV === 'production') {
+  const isLocalHost =
+    typeof window !== 'undefined' &&
+    ['localhost', '127.0.0.1', '::1'].includes(window.location.hostname);
+
+  if (process.env.NODE_ENV === 'production' && !isLocalHost) {
     throw new Error('Phantom wallet is required');
   }
 
@@ -172,6 +178,7 @@ export const useAuthStore = create<AuthStore>()(
       principal: null,
       isAuthenticated: false,
       isLoading: false,
+      hasHydrated: false,
       error: null,
 
       loginWithEmail: async (email: string) => {
@@ -259,9 +266,13 @@ export const useAuthStore = create<AuthStore>()(
       },
 
       setLoading: (loading: boolean) => set({ isLoading: loading }),
+      setHasHydrated: (hasHydrated: boolean) => set({ hasHydrated }),
     }),
     {
       name: 'auth-storage',
+      onRehydrateStorage: () => (state) => {
+        state?.setHasHydrated(true);
+      },
       partialize: (state) => ({
         walletAddress: state.walletAddress,
         email: state.email,
