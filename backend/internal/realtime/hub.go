@@ -13,25 +13,56 @@ type Event struct {
 }
 
 type Hub struct {
-	mu      sync.RWMutex
-	clients map[chan []byte]struct{}
+	mu     sync.RWMutex
+	omni   map[chan []byte]struct{}
+	groups map[string]map[chan []byte]struct{}
 }
 
 func NewHub() *Hub {
 	return &Hub{
-		clients: map[chan []byte]struct{}{},
+		omni:   map[chan []byte]struct{}{},
+		groups: map[string]map[chan []byte]struct{}{},
 	}
 }
 
+// Subscribe registers an omnichannel subscriber (receives Broadcast + BroadcastGroup).
 func (h *Hub) Subscribe() (chan []byte, func()) {
-	ch := make(chan []byte, 16)
+	return h.subscribeOmni()
+}
+
+func (h *Hub) subscribeOmni() (chan []byte, func()) {
+	ch := make(chan []byte, 32)
 	h.mu.Lock()
-	h.clients[ch] = struct{}{}
+	h.omni[ch] = struct{}{}
 	h.mu.Unlock()
 
 	cancel := func() {
 		h.mu.Lock()
-		delete(h.clients, ch)
+		delete(h.omni, ch)
+		h.mu.Unlock()
+		close(ch)
+	}
+	return ch, cancel
+}
+
+// SubscribeGroup registers a subscriber scoped to one savings group (BroadcastGroup only).
+func (h *Hub) SubscribeGroup(groupID string) (chan []byte, func()) {
+	ch := make(chan []byte, 32)
+	h.mu.Lock()
+	if h.groups[groupID] == nil {
+		h.groups[groupID] = map[chan []byte]struct{}{}
+	}
+	h.groups[groupID][ch] = struct{}{}
+	h.mu.Unlock()
+
+	cancel := func() {
+		h.mu.Lock()
+		if subs, ok := h.groups[groupID]; ok {
+			delete(subs, ch)
+			if len(subs) == 0 {
+				delete(h.groups, groupID)
+			}
+		}
 		h.mu.Unlock()
 		close(ch)
 	}
@@ -39,6 +70,47 @@ func (h *Hub) Subscribe() (chan []byte, func()) {
 }
 
 func (h *Hub) Broadcast(evtType string, payload map[string]any) {
+	raw, ok := marshalEvent(evtType, payload)
+	if !ok {
+		return
+	}
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	for ch := range h.omni {
+		select {
+		case ch <- raw:
+		default:
+		}
+	}
+}
+
+// BroadcastGroup notifies omnichannel subscribers and all listeners for groupID.
+func (h *Hub) BroadcastGroup(groupID string, evtType string, payload map[string]any) {
+	raw, ok := marshalEvent(evtType, payload)
+	if !ok {
+		return
+	}
+
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	for ch := range h.omni {
+		select {
+		case ch <- raw:
+		default:
+		}
+	}
+	if subs, ok := h.groups[groupID]; ok {
+		for ch := range subs {
+			select {
+			case ch <- raw:
+			default:
+			}
+		}
+	}
+}
+
+func marshalEvent(evtType string, payload map[string]any) ([]byte, bool) {
 	evt := Event{
 		Type:      evtType,
 		Timestamp: time.Now().UTC(),
@@ -46,15 +118,7 @@ func (h *Hub) Broadcast(evtType string, payload map[string]any) {
 	}
 	raw, err := json.Marshal(evt)
 	if err != nil {
-		return
+		return nil, false
 	}
-
-	h.mu.RLock()
-	defer h.mu.RUnlock()
-	for ch := range h.clients {
-		select {
-		case ch <- raw:
-		default:
-		}
-	}
+	return raw, true
 }

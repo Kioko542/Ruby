@@ -29,7 +29,14 @@ func (h *Handler) EventsWebSocket(w http.ResponseWriter, r *http.Request) {
 	}
 	defer conn.Close()
 
-	ch, cancel := h.Hub.Subscribe()
+	groupID := strings.TrimSpace(r.URL.Query().Get("group_id"))
+	var ch chan []byte
+	var cancel func()
+	if groupID != "" {
+		ch, cancel = h.Hub.SubscribeGroup(groupID)
+	} else {
+		ch, cancel = h.Hub.Subscribe()
+	}
 	defer cancel()
 
 	done := make(chan struct{})
@@ -178,6 +185,13 @@ func (h *Handler) ApproveSwigProposal(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusOK, proposal)
 	h.publish("swig.proposal.approved", map[string]any{"group_id": groupID, "proposal_id": proposalID, "approvals_count": proposal.ApprovalsCount, "status": proposal.Status})
+	h.publishVoteCast(groupID, map[string]any{
+		"vote_kind":       "swig",
+		"proposal_id":     proposalID,
+		"member_id":       req.MemberID,
+		"approvals_count": proposal.ApprovalsCount,
+		"status":          proposal.Status,
+	})
 }
 
 func (h *Handler) ListSwigProposals(w http.ResponseWriter, r *http.Request) {
@@ -296,6 +310,15 @@ func (h *Handler) VoteLoanRequest(w http.ResponseWriter, r *http.Request) {
 		"rejects":   rejects,
 	})
 	h.publish("loan.request.voted", map[string]any{"group_id": groupID, "loan_id": loanID, "status": loan.Status, "approvals": approvals, "rejects": rejects})
+	h.publishVoteCast(groupID, map[string]any{
+		"vote_kind": "loan",
+		"loan_id":   loanID,
+		"member_id": req.MemberID,
+		"vote":      req.Vote,
+		"approvals": approvals,
+		"rejects":   rejects,
+		"status":    loan.Status,
+	})
 }
 
 func (h *Handler) ListLoanRequests(w http.ResponseWriter, r *http.Request) {
