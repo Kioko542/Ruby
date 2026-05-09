@@ -100,6 +100,9 @@ function getSolanaAuthProvider(): SolanaAuthProvider | null {
 
 function allowEphemeralDevWalletLogin(): boolean {
   if (typeof window === 'undefined') return false;
+  if (process.env.NEXT_PUBLIC_DISABLE_EPHEMERAL_WALLET_LOGIN === 'true') {
+    return false;
+  }
   if (process.env.NODE_ENV !== 'production') return true;
   const h = window.location.hostname;
   if (['localhost', '127.0.0.1', '::1'].includes(h)) return true;
@@ -107,6 +110,14 @@ function allowEphemeralDevWalletLogin(): boolean {
   // Private LAN (e.g. next start + http://192.168.x.x:3000)
   if (/^10\.|^172\.(1[6-9]|2[0-9]|3[01])\.|^192\.168\./.test(h)) return true;
   return process.env.NEXT_PUBLIC_ALLOW_EPHEMERAL_WALLET_LOGIN === 'true';
+}
+
+function toSignatureBytes(sig: unknown): Uint8Array {
+  if (sig instanceof Uint8Array) return sig;
+  if (sig && typeof sig === 'object' && 'length' in sig && typeof (sig as ArrayLike<number>).length === 'number') {
+    return new Uint8Array(sig as ArrayLike<number>);
+  }
+  throw new Error('Wallet returned an unexpected signature format');
 }
 
 async function apiFetch<T>(
@@ -186,7 +197,12 @@ async function signWithInjectedSolanaWallet() {
 
   const challenge = await beginPhantomAuth(walletAddress);
   const encodedMessage = new TextEncoder().encode(challenge.message);
-  const { signature } = await provider.signMessage(encodedMessage, 'utf8');
+  const signResult = await provider.signMessage(encodedMessage, 'utf8');
+  const raw = (signResult as { signature?: unknown })?.signature;
+  if (raw == null) {
+    throw new Error('Wallet did not return a signature. Try again or update your wallet extension.');
+  }
+  const signature = toSignatureBytes(raw);
 
   return verifyPhantomAuth({
     wallet_address: walletAddress,
@@ -238,10 +254,21 @@ export const useAuthStore = create<AuthStore>()(
       loginWithWallet: async () => {
         set({ isLoading: true, error: null });
         try {
-          const session =
-            typeof window !== 'undefined'
-              ? (await signWithInjectedSolanaWallet()) ?? (await signWithLocalDevWallet())
-              : await signWithLocalDevWallet();
+          let session: AuthSessionResponse;
+          if (typeof window !== 'undefined') {
+            const injected = await signWithInjectedSolanaWallet();
+            if (injected) {
+              session = injected;
+            } else if (allowEphemeralDevWalletLogin()) {
+              session = await signWithLocalDevWallet();
+            } else {
+              throw new Error(
+                'No Solana wallet found. Open this app in a browser with the Phantom extension, unlock it, and click Connect again.',
+              );
+            }
+          } else {
+            session = await signWithLocalDevWallet();
+          }
           set(sessionState(session));
         } catch (error) {
           const message = error instanceof Error ? error.message : 'Wallet login failed';
