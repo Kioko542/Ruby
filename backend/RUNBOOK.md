@@ -94,6 +94,8 @@ make services-down
 | GET | `/api/v1/auth/me` | 1 | auth |
 | POST | `/api/v1/auth/logout` | 1 | auth |
 | POST | `/api/v1/groups` | 2 | web3 DRI |
+| POST | `/api/v1/groups/{id}/invite-links` | 5 | backend |
+| POST | `/api/v1/groups/{id}/join` | 5 | backend |
 | POST | `/api/v1/groups/{id}/contribute` | 2 | web3 DRI |
 | POST | `/api/v1/groups/{id}/yield` | 3 | agent writes |
 

@@ -65,6 +65,20 @@ type Member struct {
 	JoinedAt         time.Time `bun:"joined_at,default:current_timestamp" json:"joined_at"`
 }
 
+// ReferralAttribution records one-time referral credit for a valid new join.
+type ReferralAttribution struct {
+	bun.BaseModel `bun:"table:referral_attributions,alias:ra"`
+
+	ID               int64     `bun:"id,pk,autoincrement" json:"id"`
+	GroupID          string    `bun:"group_id,notnull" json:"group_id"`
+	InvitedMemberID  string    `bun:"invited_member_id,notnull" json:"invited_member_id"`
+	InvitedWallet    string    `bun:"invited_wallet,notnull" json:"invited_wallet"`
+	ReferrerMemberID string    `bun:"referrer_member_id,notnull" json:"referrer_member_id"`
+	ReferrerWallet   string    `bun:"referrer_wallet,notnull" json:"referrer_wallet"`
+	Source           string    `bun:"source,notnull" json:"source"` // invite_link | direct_referrer
+	CreatedAt        time.Time `bun:"created_at,default:current_timestamp" json:"created_at"`
+}
+
 // YieldEvent is written by the AI Treasury Agent after each DeFi deposit.
 type YieldEvent struct {
 	bun.BaseModel `bun:"table:yield_events,alias:ye"`

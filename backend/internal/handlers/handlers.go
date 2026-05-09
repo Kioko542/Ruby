@@ -3,10 +3,12 @@ package handlers
 import (
 	"context"
 	"database/sql"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -268,6 +270,78 @@ type contributeRequest struct {
 type joinGroupRequest struct {
 	MemberID      string `json:"member_id"`
 	WalletAddress string `json:"wallet_address"`
+	InviteCode    string `json:"invite_code,omitempty"`
+	ReferrerID    string `json:"referrer_member_id,omitempty"`
+}
+
+type createInviteLinkRequest struct {
+	ReferrerID string `json:"referrer_member_id"`
+}
+
+func buildInviteCode(groupID, referrerID string) string {
+	return base64.RawURLEncoding.EncodeToString([]byte(groupID + ":" + referrerID))
+}
+
+func parseInviteCode(code string) (groupID string, referrerID string, err error) {
+	raw, err := base64.RawURLEncoding.DecodeString(strings.TrimSpace(code))
+	if err != nil {
+		return "", "", errors.New("invalid invite_code")
+	}
+	parts := strings.SplitN(string(raw), ":", 2)
+	if len(parts) != 2 || strings.TrimSpace(parts[0]) == "" || strings.TrimSpace(parts[1]) == "" {
+		return "", "", errors.New("invalid invite_code")
+	}
+	return parts[0], parts[1], nil
+}
+
+func (h *Handler) CreateGroupInviteLink(w http.ResponseWriter, r *http.Request) {
+	groupID := chi.URLParam(r, "groupID")
+	if strings.TrimSpace(groupID) == "" {
+		writeError(w, http.StatusBadRequest, "groupID is required")
+		return
+	}
+
+	var req createInviteLinkRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	if strings.TrimSpace(req.ReferrerID) == "" {
+		writeError(w, http.StatusBadRequest, "referrer_member_id is required")
+		return
+	}
+
+	ctx := context.Background()
+	var referrer models.Member
+	if err := h.DB.NewSelect().
+		Model(&referrer).
+		Where("id = ?", req.ReferrerID).
+		Where("group_id = ?", groupID).
+		Scan(ctx); err != nil {
+		writeError(w, http.StatusNotFound, "referrer member not found in group")
+		return
+	}
+
+	frontendBase := strings.TrimSpace(h.Config.AuthDomain)
+	if frontendBase == "" {
+		frontendBase = "localhost:3000"
+	}
+	if !strings.HasPrefix(frontendBase, "http://") && !strings.HasPrefix(frontendBase, "https://") {
+		frontendBase = "http://" + frontendBase
+	}
+	inviteCode := buildInviteCode(groupID, req.ReferrerID)
+	inviteURL := fmt.Sprintf("%s/?group=%s&invite=%s",
+		strings.TrimSuffix(frontendBase, "/"),
+		url.QueryEscape(groupID),
+		url.QueryEscape(inviteCode),
+	)
+
+	writeJSON(w, http.StatusOK, map[string]string{
+		"group_id":           groupID,
+		"referrer_member_id": req.ReferrerID,
+		"invite_code":        inviteCode,
+		"invite_url":         inviteURL,
+	})
 }
 
 func (h *Handler) JoinGroup(w http.ResponseWriter, r *http.Request) {
@@ -284,6 +358,12 @@ func (h *Handler) JoinGroup(w http.ResponseWriter, r *http.Request) {
 	}
 	if strings.TrimSpace(req.MemberID) == "" || strings.TrimSpace(req.WalletAddress) == "" {
 		writeError(w, http.StatusBadRequest, "member_id and wallet_address are required")
+		return
+	}
+	req.ReferrerID = strings.TrimSpace(req.ReferrerID)
+	req.InviteCode = strings.TrimSpace(req.InviteCode)
+	if req.ReferrerID != "" && req.InviteCode != "" {
+		writeError(w, http.StatusBadRequest, "provide either invite_code or referrer_member_id, not both")
 		return
 	}
 
@@ -307,18 +387,110 @@ func (h *Handler) JoinGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	existingWallets, err := h.DB.NewSelect().
+		Model((*models.Member)(nil)).
+		Where("group_id = ?", groupID).
+		Where("lower(wallet_address) = lower(?)", req.WalletAddress).
+		Count(ctx)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to check existing wallet membership")
+		return
+	}
+	if existingWallets > 0 {
+		writeError(w, http.StatusConflict, "wallet already joined this group")
+		return
+	}
+
+	referrerID := req.ReferrerID
+	referralSource := "direct_referrer"
+	if req.InviteCode != "" {
+		decodedGroupID, decodedReferrerID, err := parseInviteCode(req.InviteCode)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if decodedGroupID != groupID {
+			writeError(w, http.StatusBadRequest, "invite_code does not belong to this group")
+			return
+		}
+		referrerID = decodedReferrerID
+		referralSource = "invite_link"
+	}
+
 	member := &models.Member{
 		ID:            req.MemberID,
 		GroupID:       groupID,
 		WalletAddress: req.WalletAddress,
 		JoinedAt:      time.Now().UTC(),
 	}
+
+	var referrer *models.Member
+	if referrerID != "" {
+		ref := &models.Member{}
+		if err := h.DB.NewSelect().
+			Model(ref).
+			Where("id = ?", referrerID).
+			Where("group_id = ?", groupID).
+			Scan(ctx); err != nil {
+			writeError(w, http.StatusBadRequest, "invalid referrer_member_id")
+			return
+		}
+
+		if strings.EqualFold(ref.ID, member.ID) || strings.EqualFold(ref.WalletAddress, member.WalletAddress) {
+			writeError(w, http.StatusBadRequest, "self-referrals are not allowed")
+			return
+		}
+		referrer = ref
+	}
+
+	referralApplied := false
 	if _, err := h.DB.NewInsert().Model(member).Exec(ctx); err != nil {
 		writeError(w, http.StatusConflict, "failed to join group (member may already exist)")
 		return
 	}
 
-	writeJSON(w, http.StatusCreated, member)
+	if referrer != nil {
+		existingAttribution, err := h.DB.NewSelect().
+			Model((*models.ReferralAttribution)(nil)).
+			Where("group_id = ?", groupID).
+			Where("invited_member_id = ?", member.ID).
+			Count(ctx)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to verify referral attribution")
+			return
+		}
+		if existingAttribution == 0 {
+			referrer.CreditScore += 1
+			if _, err := h.DB.NewUpdate().
+				Model(referrer).
+				Column("credit_score").
+				WherePK().
+				Exec(ctx); err != nil {
+				writeError(w, http.StatusInternalServerError, "failed to apply referrer credit")
+				return
+			}
+			attribution := &models.ReferralAttribution{
+				GroupID:          groupID,
+				InvitedMemberID:  member.ID,
+				InvitedWallet:    member.WalletAddress,
+				ReferrerMemberID: referrer.ID,
+				ReferrerWallet:   referrer.WalletAddress,
+				Source:           referralSource,
+				CreatedAt:        time.Now().UTC(),
+			}
+			if _, err := h.DB.NewInsert().Model(attribution).Exec(ctx); err != nil {
+				writeError(w, http.StatusInternalServerError, "failed to save referral attribution")
+				return
+			}
+			referralApplied = true
+		}
+	}
+
+	writeJSON(w, http.StatusCreated, map[string]any{
+		"member":           member,
+		"referral_applied": referralApplied,
+		"referrer_member":  referrerID,
+	})
 }
 
 func (h *Handler) Contribute(w http.ResponseWriter, r *http.Request) {
