@@ -51,6 +51,7 @@ func main() {
 		// Groups
 		r.Get("/groups", h.ListGroups)
 		r.Post("/groups", h.CreateGroup)
+		r.Post("/groups/{groupID}/invite-links", h.CreateGroupInviteLink)
 		r.Post("/groups/{groupID}/join", h.JoinGroup)
 		r.Post("/groups/{groupID}/contribute", h.Contribute)
 		r.Post("/groups/{groupID}/swig", h.ConfigureSwig)

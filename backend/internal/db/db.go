@@ -30,6 +30,7 @@ func ensureSchema(database *bun.DB) {
 		(*models.YieldEvent)(nil),
 		(*models.ChainEvent)(nil),
 		(*models.AuthSession)(nil),
+		(*models.ReferralAttribution)(nil),
 	} {
 		if _, err := database.NewCreateTable().
 			Model(model).

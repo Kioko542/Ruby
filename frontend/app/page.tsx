@@ -1,11 +1,129 @@
 "use client";
 import { useWalletConnection } from "@solana/react-hooks";
+import { useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
 
 export default function Home() {
   const { connectors, connect, disconnect, wallet, status } =
     useWalletConnection();
+  const searchParams = useSearchParams();
 
   const address = wallet?.account.address.toString();
+  const backendBase = useMemo(
+    () =>
+      (process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://localhost:8080").replace(
+        /\/$/,
+        "",
+      ),
+    [],
+  );
+
+  const [groupID, setGroupID] = useState(searchParams.get("group") ?? "");
+  const [memberID, setMemberID] = useState("");
+  const [inviteCode, setInviteCode] = useState(searchParams.get("invite") ?? "");
+  const [referrerID, setReferrerID] = useState("");
+  const [inviteLink, setInviteLink] = useState("");
+  const [apiMessage, setApiMessage] = useState("");
+  const [solBalance, setSolBalance] = useState<null | {
+    lamports: number;
+    sol: number;
+  }>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function fetchBalance() {
+    if (!address) {
+      setApiMessage("Connect a wallet first.");
+      return;
+    }
+    setBusy(true);
+    setApiMessage("");
+    try {
+      const res = await fetch(
+        `${backendBase}/api/v1/web3/balance?address=${encodeURIComponent(address)}`,
+      );
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error ?? "Failed to fetch balance");
+      }
+      setSolBalance({ lamports: data.lamports, sol: data.sol });
+    } catch (err) {
+      setApiMessage(err instanceof Error ? err.message : "Unexpected error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function joinGroup() {
+    if (!groupID || !memberID || !address) {
+      setApiMessage("group ID, member ID, and connected wallet are required.");
+      return;
+    }
+    setBusy(true);
+    setApiMessage("");
+    try {
+      const body: Record<string, string> = {
+        member_id: memberID,
+        wallet_address: address,
+      };
+      if (inviteCode) {
+        body.invite_code = inviteCode;
+      } else if (referrerID) {
+        body.referrer_member_id = referrerID;
+      }
+
+      const res = await fetch(
+        `${backendBase}/api/v1/groups/${encodeURIComponent(groupID)}/join`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        },
+      );
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error ?? "Failed to join group");
+      }
+      setApiMessage(
+        data.referral_applied
+          ? "Joined successfully. Referral credited."
+          : "Joined successfully.",
+      );
+    } catch (err) {
+      setApiMessage(err instanceof Error ? err.message : "Unexpected error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function createInviteLink() {
+    if (!groupID || !memberID) {
+      setApiMessage("group ID and your member ID are required.");
+      return;
+    }
+    setBusy(true);
+    setApiMessage("");
+    try {
+      const res = await fetch(
+        `${backendBase}/api/v1/groups/${encodeURIComponent(groupID)}/invite-links`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ referrer_member_id: memberID }),
+        },
+      );
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.error ?? "Failed to create invite link");
+      }
+      setInviteLink(data.invite_url);
+      setInviteCode(data.invite_code);
+      setApiMessage("Invite link generated.");
+    } catch (err) {
+      setApiMessage(err instanceof Error ? err.message : "Unexpected error");
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
     <div className="relative min-h-screen overflow-x-clip bg-bg1 text-foreground">
@@ -21,7 +139,8 @@ export default function Home() {
             Drop in <code className="font-mono">@solana/react-hooks</code>, wrap
             your tree once, and you get wallet connect/disconnect plus
             ready-to-use hooks for balances and transactions—no manual RPC
-            wiring.
+            wiring. This scaffold is wired to the Go backend for group join +
+            referral attribution.
           </p>
           <ul className="mt-4 space-y-2 text-sm text-foreground">
             <li className="flex gap-2">
@@ -149,6 +268,78 @@ export default function Home() {
               Disconnect
             </button>
           </div>
+        </section>
+
+        <section className="w-full max-w-3xl space-y-4 rounded-2xl border border-border-low bg-card p-6 shadow-[0_20px_80px_-50px_rgba(0,0,0,0.35)]">
+          <div className="space-y-1">
+            <p className="text-lg font-semibold">Backend integration checks</p>
+            <p className="text-sm text-muted">
+              Uses the backend as source of truth for joins, invites, referrals,
+              and wallet balance reads.
+            </p>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <input
+              value={groupID}
+              onChange={(e) => setGroupID(e.target.value)}
+              className="rounded-lg border border-border-low bg-bg1 px-3 py-2 text-sm"
+              placeholder="Group ID"
+            />
+            <input
+              value={memberID}
+              onChange={(e) => setMemberID(e.target.value)}
+              className="rounded-lg border border-border-low bg-bg1 px-3 py-2 text-sm"
+              placeholder="Your member ID"
+            />
+            <input
+              value={inviteCode}
+              onChange={(e) => setInviteCode(e.target.value)}
+              className="rounded-lg border border-border-low bg-bg1 px-3 py-2 text-sm"
+              placeholder="Invite code (optional)"
+            />
+            <input
+              value={referrerID}
+              onChange={(e) => setReferrerID(e.target.value)}
+              className="rounded-lg border border-border-low bg-bg1 px-3 py-2 text-sm"
+              placeholder="Referrer member ID (optional)"
+            />
+          </div>
+
+          <div className="flex flex-wrap gap-3">
+            <button
+              onClick={fetchBalance}
+              disabled={busy}
+              className="rounded-lg border border-border-low px-3 py-2 text-sm font-medium cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Fetch balance via backend
+            </button>
+            <button
+              onClick={joinGroup}
+              disabled={busy}
+              className="rounded-lg border border-border-low px-3 py-2 text-sm font-medium cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Join group
+            </button>
+            <button
+              onClick={createInviteLink}
+              disabled={busy}
+              className="rounded-lg border border-border-low px-3 py-2 text-sm font-medium cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              Create invite link
+            </button>
+          </div>
+
+          {solBalance && (
+            <p className="text-sm text-muted">
+              Backend balance: {solBalance.sol} SOL ({solBalance.lamports}{" "}
+              lamports)
+            </p>
+          )}
+          {inviteLink && (
+            <p className="break-all text-sm text-muted">Invite URL: {inviteLink}</p>
+          )}
+          {apiMessage && <p className="text-sm text-foreground">{apiMessage}</p>}
         </section>
       </main>
     </div>

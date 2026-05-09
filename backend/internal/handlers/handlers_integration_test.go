@@ -161,3 +161,17 @@ func TestAuthMeAndLogoutProtectedEndpoints(t *testing.T) {
 		t.Fatalf("expected revoked session sess_123, got %s", fake.revokedID)
 	}
 }
+
+func TestInviteCodeRoundTrip(t *testing.T) {
+	groupID := "group_123"
+	referrerID := "member_456"
+
+	code := buildInviteCode(groupID, referrerID)
+	gotGroup, gotReferrer, err := parseInviteCode(code)
+	if err != nil {
+		t.Fatalf("expected no error, got %v", err)
+	}
+	if gotGroup != groupID || gotReferrer != referrerID {
+		t.Fatalf("unexpected decoded values: group=%s referrer=%s", gotGroup, gotReferrer)
+	}
+}
