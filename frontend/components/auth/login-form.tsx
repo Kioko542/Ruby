@@ -1,20 +1,28 @@
 // components/login-form.tsx
 "use client";
 
-import { useState } from "react";
+import { useCallback, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/stores/auth-store";
 import { useToast } from "@/hooks/use-toast";
 import { PrivyLogin } from "@/components/auth/privy-login";
+import { AUTH_REDIRECT_PATH } from "@/lib/auth-paths";
 
 interface LoginFormProps {
   onSuccess?: () => void;
 }
 
 export function LoginForm({ onSuccess }: LoginFormProps) {
+  const router = useRouter();
   const [error, setError] = useState("");
   const { loginWithWallet, isLoading } = useAuthStore();
   const { toast } = useToast();
   const hasPrivy = Boolean(process.env.NEXT_PUBLIC_PRIVY_APP_ID);
+
+  const goToDashboard = useCallback(() => {
+    router.replace(AUTH_REDIRECT_PATH);
+    onSuccess?.();
+  }, [router, onSuccess]);
 
   const handleWalletLogin = async () => {
     setError("");
@@ -24,7 +32,7 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
         title: "Wallet connected",
         description: "Your session was verified by the Ruby backend.",
       });
-      queueMicrotask(() => onSuccess?.());
+      goToDashboard();
     } catch (error) {
       const message = error instanceof Error ? error.message : "Please try again.";
       setError(message);
@@ -219,7 +227,7 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
         </div>
         <div className="ruby-card-content">
           {hasPrivy ? (
-            <PrivyLogin onSuccess={onSuccess} onError={handlePrivyError} />
+            <PrivyLogin onSuccess={goToDashboard} onError={handlePrivyError} />
           ) : (
             <div className="ruby-footnote" style={{ marginTop: 0, marginBottom: 12 }}>
               Set NEXT_PUBLIC_PRIVY_APP_ID to enable Privy email login.

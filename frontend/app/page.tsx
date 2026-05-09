@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useCallback } from "react";
+import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { LoginForm } from "@/components/auth/login-form";
 import { AuthLoading } from "@/components/auth/auth-loading";
@@ -10,10 +10,6 @@ import { AUTH_REDIRECT_PATH } from "@/lib/auth-paths";
 export default function HomePage() {
   const router = useRouter();
   const { hasHydrated, isAuthenticated, token } = useAuthStore();
-
-  const goToApp = useCallback(() => {
-    router.replace(AUTH_REDIRECT_PATH);
-  }, [router]);
 
   useEffect(() => {
     if (hasHydrated && isAuthenticated && token) {
@@ -42,7 +38,7 @@ export default function HomePage() {
           background: "#fafaf9",
         }}
       >
-        <LoginForm onSuccess={goToApp} />
+        <LoginForm />
       </div>
     </>
   );
