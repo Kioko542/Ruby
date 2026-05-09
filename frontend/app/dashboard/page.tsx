@@ -131,7 +131,7 @@ export default function RubyDashboard() {
   }, [router]);
 
   const handleCreateCircle = useCallback(() => {
-    router.push("/groups/create");
+    router.push("/create");
   }, [router]);
 
   const handleContributeNow = useCallback(() => {
