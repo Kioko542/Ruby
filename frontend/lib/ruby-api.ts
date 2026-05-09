@@ -279,6 +279,133 @@ export async function createBlink(
   return res.json() as Promise<{ action_id: string; blink_type: string; url: string; status: string }>;
 }
 
+export type LoanRequestRow = {
+  id: string;
+  group_id: string;
+  borrower_member_id: string;
+  amount_lamports: number;
+  reason: string;
+  status: string;
+  created_at: string;
+};
+
+export type SwigProposalRow = {
+  id: string;
+  group_id: string;
+  title: string;
+  kind: string;
+  amount_lamports: number;
+  approvals_required: number;
+  approvals_count: number;
+  status: string;
+  created_by_member_id: string;
+  created_at: string;
+  executed_at?: string;
+};
+
+export async function fetchLoanRequests(groupId: string): Promise<LoanRequestRow[]> {
+  const res = await fetch(`${API_BASE}/groups/${encodeURIComponent(groupId)}/loans`);
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json() as Promise<LoanRequestRow[]>;
+}
+
+export async function createLoanRequest(
+  groupId: string,
+  body: { borrower_member_id: string; amount_lamports: number; reason?: string; id?: string },
+): Promise<LoanRequestRow> {
+  const res = await fetch(`${API_BASE}/groups/${encodeURIComponent(groupId)}/loans`, {
+    method: "POST",
+    headers: headers(),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json() as Promise<LoanRequestRow>;
+}
+
+export async function voteLoanRequest(
+  groupId: string,
+  loanId: string,
+  body: { member_id: string; vote: "approve" | "reject" },
+): Promise<{ loan_id: string; status: string; approvals: number; rejects: number }> {
+  const res = await fetch(
+    `${API_BASE}/groups/${encodeURIComponent(groupId)}/loans/${encodeURIComponent(loanId)}/vote`,
+    {
+      method: "POST",
+      headers: headers(),
+      body: JSON.stringify(body),
+    },
+  );
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json() as Promise<{ loan_id: string; status: string; approvals: number; rejects: number }>;
+}
+
+export async function fetchSwigProposals(groupId: string): Promise<SwigProposalRow[]> {
+  const res = await fetch(`${API_BASE}/groups/${encodeURIComponent(groupId)}/swig/proposals`);
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json() as Promise<SwigProposalRow[]>;
+}
+
+export async function createSwigProposal(
+  groupId: string,
+  body: {
+    title: string;
+    kind?: string;
+    amount_lamports: number;
+    approvals_required?: number;
+    created_by_member_id: string;
+  },
+): Promise<SwigProposalRow> {
+  const res = await fetch(`${API_BASE}/groups/${encodeURIComponent(groupId)}/swig/proposals`, {
+    method: "POST",
+    headers: headers(),
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json() as Promise<SwigProposalRow>;
+}
+
+export async function approveSwigProposal(
+  groupId: string,
+  proposalId: string,
+  body: { member_id: string; wallet: string },
+): Promise<SwigProposalRow> {
+  const res = await fetch(
+    `${API_BASE}/groups/${encodeURIComponent(groupId)}/swig/proposals/${encodeURIComponent(proposalId)}/approve`,
+    {
+      method: "POST",
+      headers: headers(),
+      body: JSON.stringify(body),
+    },
+  );
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json() as Promise<SwigProposalRow>;
+}
+
+export async function endGroupCycle(groupId: string): Promise<{
+  group_id: string;
+  settled_cycle: number;
+  new_active_cycle: number;
+  payout_ready: boolean;
+  vault_snapshot: number;
+  total_cycle_pool: number;
+  member_allocations: { member_id: string; wallet_address: string; share_lamports: number; contributed_in_cycle: number }[];
+}> {
+  const res = await fetch(`${API_BASE}/groups/${encodeURIComponent(groupId)}/cycle/end`, {
+    method: "POST",
+    headers: headers(),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json() as Promise<{
+    group_id: string;
+    settled_cycle: number;
+    new_active_cycle: number;
+    payout_ready: boolean;
+    vault_snapshot: number;
+    total_cycle_pool: number;
+    member_allocations: { member_id: string; wallet_address: string; share_lamports: number; contributed_in_cycle: number }[];
+  }>;
+}
+
 export function lamportsToSol(lamports: number): string {
   return (lamports / 1_000_000_000).toLocaleString(undefined, {
     minimumFractionDigits: 2,

@@ -412,6 +412,7 @@ function DashboardInner() {
                           <tr className="border-t border-[var(--border-strong)]">
                             <td colSpan={6} className="p-0">
                               <GroupInsightsPanel
+                                key={g.id}
                                 group={g}
                                 walletAddress={displayWallet}
                                 memberId={myMember?.id ?? null}
