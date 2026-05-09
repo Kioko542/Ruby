@@ -29,6 +29,7 @@ func ensureSchema(database *bun.DB) {
 		(*models.Contribution)(nil),
 		(*models.YieldEvent)(nil),
 		(*models.ChainEvent)(nil),
+		(*models.AuthSession)(nil),
 	} {
 		if _, err := database.NewCreateTable().
 			Model(model).

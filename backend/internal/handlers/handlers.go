@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/dev3pack/ruby/backend/internal/auth"
 	"github.com/dev3pack/ruby/backend/internal/config"
 	"github.com/dev3pack/ruby/backend/internal/models"
 	"github.com/dev3pack/ruby/backend/internal/treasury"
@@ -22,6 +23,15 @@ type Handler struct {
 	DB     *bun.DB
 	Config *config.Config
 	Web3   *web3.Client
+	Auth   AuthService
+}
+
+type AuthService interface {
+	BeginPhantomLogin(walletAddress string) (string, string, error)
+	VerifyPhantomSignature(walletAddress, nonce, message, signatureBase58 string) (*auth.Principal, string, error)
+	VerifyPrivyToken(privyToken string) (*auth.Principal, string, error)
+	RevokeSession(sessionID string) error
+	ParseSessionToken(tokenString string) (*auth.Principal, error)
 }
 
 func NewHandler(db *bun.DB, cfg *config.Config) *Handler {
@@ -29,6 +39,7 @@ func NewHandler(db *bun.DB, cfg *config.Config) *Handler {
 		DB:     db,
 		Config: cfg,
 		Web3:   web3.NewClient(cfg.SolanaRPCURL),
+		Auth:   auth.NewService(cfg, db),
 	}
 }
 
@@ -52,6 +63,95 @@ func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
 		"service": "ruby-backend",
 		"status":  "ok",
 	})
+}
+
+type authNonceRequest struct {
+	WalletAddress string `json:"wallet_address"`
+}
+
+func (h *Handler) BeginPhantomAuth(w http.ResponseWriter, r *http.Request) {
+	var req authNonceRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	nonce, message, err := h.Auth.BeginPhantomLogin(req.WalletAddress)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{
+		"wallet_address": req.WalletAddress,
+		"nonce":          nonce,
+		"message":        message,
+	})
+}
+
+type verifyPhantomRequest struct {
+	WalletAddress string `json:"wallet_address"`
+	Nonce         string `json:"nonce"`
+	Message       string `json:"message"`
+	Signature     string `json:"signature"`
+}
+
+func (h *Handler) VerifyPhantomAuth(w http.ResponseWriter, r *http.Request) {
+	var req verifyPhantomRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	principal, token, err := h.Auth.VerifyPhantomSignature(req.WalletAddress, req.Nonce, req.Message, req.Signature)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"token":     token,
+		"principal": principal,
+	})
+}
+
+type verifyPrivyRequest struct {
+	PrivyToken string `json:"privy_token"`
+}
+
+func (h *Handler) VerifyPrivyAuth(w http.ResponseWriter, r *http.Request) {
+	var req verifyPrivyRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	principal, token, err := h.Auth.VerifyPrivyToken(req.PrivyToken)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"token":     token,
+		"principal": principal,
+	})
+}
+
+func (h *Handler) AuthMe(w http.ResponseWriter, r *http.Request) {
+	principal, ok := auth.PrincipalFromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "auth context missing")
+		return
+	}
+	writeJSON(w, http.StatusOK, principal)
+}
+
+func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
+	principal, ok := auth.PrincipalFromContext(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "auth context missing")
+		return
+	}
+	if err := h.Auth.RevokeSession(principal.SessionID); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to revoke session")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "logged_out"})
 }
 
 func (h *Handler) GetGroups(w http.ResponseWriter, r *http.Request) {

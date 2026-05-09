@@ -70,6 +70,12 @@ make services-down
 | `SOLANA_RPC_URL` | web3 | Solana RPC endpoint |
 | `HELIUS_API_KEY` | web3 | Helius webhook key |
 | `SENDAI_API_KEY` | backend | AI agent key (Phase 3) |
+| `AUTH_JWT_SECRET` | backend | Signing secret for backend session JWT |
+| `AUTH_SESSION_TTL_MINUTES` | backend | Session expiry in minutes |
+| `AUTH_DOMAIN` | backend/frontend | Domain included in Phantom sign-in message |
+| `PRIVY_APP_ID` | auth | Privy app identifier (JWT audience) |
+| `PRIVY_ISSUER` | auth | Privy token issuer |
+| `PRIVY_JWKS_URL` | auth | Privy JWKS endpoint for JWT signature verification |
 
 > ⚠️ Do NOT add new env vars without updating this table and notifying dependent owners.
 
@@ -82,6 +88,11 @@ make services-down
 | GET | `/health` | 1 | backend |
 | GET | `/api/v1/groups` | 2 | backend |
 | GET | `/api/v1/groups/{id}/yield` | 3 | backend |
+| POST | `/api/v1/auth/phantom/nonce` | 1 | auth |
+| POST | `/api/v1/auth/phantom/verify` | 1 | auth |
+| POST | `/api/v1/auth/privy/verify` | 1 | auth |
+| GET | `/api/v1/auth/me` | 1 | auth |
+| POST | `/api/v1/auth/logout` | 1 | auth |
 | POST | `/api/v1/groups` | 2 | web3 DRI |
 | POST | `/api/v1/groups/{id}/contribute` | 2 | web3 DRI |
 | POST | `/api/v1/groups/{id}/yield` | 3 | agent writes |

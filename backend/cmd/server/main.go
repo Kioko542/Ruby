@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/dev3pack/ruby/backend/internal/auth"
 	"github.com/dev3pack/ruby/backend/internal/config"
 	"github.com/dev3pack/ruby/backend/internal/db"
 	"github.com/dev3pack/ruby/backend/internal/handlers"
@@ -26,6 +27,18 @@ func main() {
 
 	r.Get("/health", h.Health)
 	r.Route("/api/v1", func(r chi.Router) {
+		r.Route("/auth", func(r chi.Router) {
+			r.Post("/phantom/nonce", h.BeginPhantomAuth)
+			r.Post("/phantom/verify", h.VerifyPhantomAuth)
+			r.Post("/privy/verify", h.VerifyPrivyAuth)
+
+			r.Group(func(r chi.Router) {
+				r.Use(auth.Middleware(h.Auth))
+				r.Get("/me", h.AuthMe)
+				r.Post("/logout", h.Logout)
+			})
+		})
+
 		r.Get("/groups", h.GetGroups)
 		r.Post("/groups", h.CreateGroup)
 		r.Post("/groups/{groupID}/join", h.JoinGroup)

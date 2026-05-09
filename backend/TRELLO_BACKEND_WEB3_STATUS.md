@@ -6,6 +6,15 @@ This checklist maps Trello backend/web3 cards to implemented deliverables in thi
 
 - [x] Health endpoint with service payload: `GET /health`
 - [x] Bootstrapped Postgres schema creation on startup
+- [x] Auth baseline endpoints for Privy + Phantom fallback:
+  - `POST /api/v1/auth/phantom/nonce`
+  - `POST /api/v1/auth/phantom/verify`
+  - `POST /api/v1/auth/privy/verify`
+  - `GET /api/v1/auth/me` (protected)
+  - `POST /api/v1/auth/logout` (protected)
+- [x] Strict Phantom sign-in message validation:
+  - expected statement, domain, wallet, and nonce lines
+  - nonce one-time use + expiry enforcement
 - [x] Route wiring in both server entrypoints:
   - `cmd/server/main.go`
   - `main.go`
@@ -84,3 +93,6 @@ This checklist maps Trello backend/web3 cards to implemented deliverables in thi
 - [x] Integration tests (httptest):
   - `internal/web3/client_integration_test.go`
   - `internal/handlers/handlers_integration_test.go`
+- [x] Auth coverage:
+  - `internal/auth/service_test.go`
+  - protected endpoint flow (`auth/me`, `auth/logout`) with bearer middleware

@@ -40,6 +40,19 @@ type ChainEvent struct {
 	CreatedAt  time.Time `bun:"created_at,default:current_timestamp" json:"created_at"`
 }
 
+// AuthSession stores issued backend sessions for revocation and auditing.
+type AuthSession struct {
+	bun.BaseModel `bun:"table:auth_sessions,alias:as"`
+
+	ID            string     `bun:"id,pk" json:"id"`
+	UserID        string     `bun:"user_id,notnull" json:"user_id"`
+	WalletAddress string     `bun:"wallet_address" json:"wallet_address"`
+	Provider      string     `bun:"provider,notnull" json:"provider"` // privy | phantom
+	CreatedAt     time.Time  `bun:"created_at,default:current_timestamp" json:"created_at"`
+	ExpiresAt     time.Time  `bun:"expires_at,notnull" json:"expires_at"`
+	RevokedAt     *time.Time `bun:"revoked_at" json:"revoked_at,omitempty"`
+}
+
 // Member mirrors the on-chain MemberRecord.
 type Member struct {
 	bun.BaseModel `bun:"table:members,alias:m"`
