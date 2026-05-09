@@ -16,7 +16,7 @@ import (
 func main() {
 	cfg := config.Load()
 	database := db.New(cfg.DatabaseURL)
-	h := handlers.NewHandler(database)
+	h := handlers.NewHandler(database, cfg)
 
 	r := chi.NewRouter()
 
@@ -27,7 +27,17 @@ func main() {
 	r.Get("/health", h.Health)
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Get("/groups", h.GetGroups)
+		r.Post("/groups", h.CreateGroup)
+		r.Post("/groups/{groupID}/join", h.JoinGroup)
+		r.Post("/groups/{groupID}/contribute", h.Contribute)
+		r.Post("/groups/{groupID}/swig", h.ConfigureSwig)
+		r.Post("/groups/{groupID}/token", h.ConfigureToken2022)
+		r.Get("/groups/{groupID}/explorer", h.GetGroupExplorerLinks)
 		r.Get("/groups/{groupID}/yield", h.GetGroupYield)
+		r.Post("/groups/{groupID}/yield", h.CreateYieldEvent)
+		r.Post("/agent/run", h.RunTreasuryAgent)
+		r.Get("/web3/balance", h.SolanaWalletBalance)
+		r.Post("/webhooks/helius", h.HeliusWebhook)
 	})
 
 	addr := fmt.Sprintf(":%s", cfg.Port)

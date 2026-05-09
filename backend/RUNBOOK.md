@@ -28,9 +28,12 @@ cp .env.example .env
 # Edit .env — set DATABASE_URL to your local Postgres
 ```
 
-### 4. Start a local Postgres (Docker)
+### 4. Start local services (Docker Compose)
 ```bash
-docker run --name ruby-pg -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=ruby_dev -p 5432:5432 -d postgres:16
+cd ..
+docker compose up -d
+# or from backend/
+make services-up
 ```
 
 ### 5. Run the server
@@ -45,6 +48,14 @@ make dev
 ```bash
 curl http://localhost:8080/health
 # → {"service":"ruby-backend","status":"ok"}
+```
+
+### Stop local services
+```bash
+cd ..
+docker compose down
+# or from backend/
+make services-down
 ```
 
 ---

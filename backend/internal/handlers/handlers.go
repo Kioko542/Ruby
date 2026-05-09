@@ -1,35 +1,598 @@
 package handlers
 
 import (
+	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
+	"strings"
+	"time"
 
+	"github.com/dev3pack/ruby/backend/internal/config"
+	"github.com/dev3pack/ruby/backend/internal/models"
+	"github.com/dev3pack/ruby/backend/internal/treasury"
+	"github.com/dev3pack/ruby/backend/internal/web3"
 	"github.com/go-chi/chi/v5"
 	"github.com/uptrace/bun"
 )
 
 type Handler struct {
-	DB *bun.DB
+	DB     *bun.DB
+	Config *config.Config
+	Web3   *web3.Client
 }
 
-func NewHandler(db *bun.DB) *Handler {
-	return &Handler{DB: db}
+func NewHandler(db *bun.DB, cfg *config.Config) *Handler {
+	return &Handler{
+		DB:     db,
+		Config: cfg,
+		Web3:   web3.NewClient(cfg.SolanaRPCURL),
+	}
+}
+
+// New keeps compatibility with the legacy bootstrap in root main.go.
+func New(db *bun.DB, cfg *config.Config) *Handler {
+	return NewHandler(db, cfg)
+}
+
+func writeJSON(w http.ResponseWriter, status int, payload any) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(payload)
+}
+
+func writeError(w http.ResponseWriter, status int, message string) {
+	writeJSON(w, status, map[string]string{"error": message})
 }
 
 func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	writeJSON(w, http.StatusOK, map[string]string{
+		"service": "ruby-backend",
+		"status":  "ok",
+	})
 }
 
 func (h *Handler) GetGroups(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(`[]`))
+	var groups []models.Group
+	ctx := context.Background()
+
+	if err := h.DB.NewSelect().
+		Model(&groups).
+		Relation("Members").
+		Order("created_at DESC").
+		Scan(ctx); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to fetch groups")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, groups)
 }
 
 func (h *Handler) GetGroupYield(w http.ResponseWriter, r *http.Request) {
-	_ = chi.URLParam(r, "groupID") // stub usage
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(`{}`))
+	groupID := chi.URLParam(r, "groupID")
+	if strings.TrimSpace(groupID) == "" {
+		writeError(w, http.StatusBadRequest, "groupID is required")
+		return
+	}
+
+	ctx := context.Background()
+	var events []models.YieldEvent
+	if err := h.DB.NewSelect().
+		Model(&events).
+		Where("group_id = ?", groupID).
+		Order("created_at DESC").
+		Scan(ctx); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to fetch group yield")
+		return
+	}
+
+	var totalDeposited int64
+	for _, e := range events {
+		totalDeposited += e.AmountDeposited
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"group_id":        groupID,
+		"event_count":     len(events),
+		"total_deposited": totalDeposited,
+		"events":          events,
+	})
+}
+
+// ListGroups keeps compatibility with legacy root main.go routes.
+func (h *Handler) ListGroups(w http.ResponseWriter, r *http.Request) {
+	h.GetGroups(w, r)
+}
+
+type createGroupRequest struct {
+	ID              string `json:"id"`
+	Name            string `json:"name"`
+	CreatorWallet   string `json:"creator_wallet"`
+	ContributionAmt int64  `json:"contribution_amt"`
+	MaxMembers      int    `json:"max_members"`
+	SwigVaultAddr   string `json:"swig_vault_addr"`
+	OnChainPDA      string `json:"on_chain_pda"`
+}
+
+func (h *Handler) CreateGroup(w http.ResponseWriter, r *http.Request) {
+	var req createGroupRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+
+	if strings.TrimSpace(req.ID) == "" || strings.TrimSpace(req.Name) == "" || strings.TrimSpace(req.CreatorWallet) == "" {
+		writeError(w, http.StatusBadRequest, "id, name and creator_wallet are required")
+		return
+	}
+	if req.ContributionAmt <= 0 {
+		writeError(w, http.StatusBadRequest, "contribution_amt must be > 0")
+		return
+	}
+	if req.MaxMembers == 0 {
+		req.MaxMembers = 10
+	}
+
+	group := &models.Group{
+		ID:              req.ID,
+		Name:            req.Name,
+		CreatorWallet:   req.CreatorWallet,
+		ContributionAmt: req.ContributionAmt,
+		MaxMembers:      req.MaxMembers,
+		SwigVaultAddr:   req.SwigVaultAddr,
+		OnChainPDA:      req.OnChainPDA,
+		CreatedAt:       time.Now().UTC(),
+		UpdatedAt:       time.Now().UTC(),
+	}
+
+	ctx := context.Background()
+	if _, err := h.DB.NewInsert().Model(group).Exec(ctx); err != nil {
+		writeError(w, http.StatusConflict, "failed to create group (maybe duplicate id)")
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, group)
+}
+
+type contributeRequest struct {
+	MemberID      string `json:"member_id"`
+	WalletAddress string `json:"wallet_address"`
+	Amount        int64  `json:"amount"`
+	CycleNumber   int    `json:"cycle_number"`
+	TxSignature   string `json:"tx_signature"`
+	OnTime        bool   `json:"on_time"`
+}
+
+type joinGroupRequest struct {
+	MemberID      string `json:"member_id"`
+	WalletAddress string `json:"wallet_address"`
+}
+
+func (h *Handler) JoinGroup(w http.ResponseWriter, r *http.Request) {
+	groupID := chi.URLParam(r, "groupID")
+	if strings.TrimSpace(groupID) == "" {
+		writeError(w, http.StatusBadRequest, "groupID is required")
+		return
+	}
+
+	var req joinGroupRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	if strings.TrimSpace(req.MemberID) == "" || strings.TrimSpace(req.WalletAddress) == "" {
+		writeError(w, http.StatusBadRequest, "member_id and wallet_address are required")
+		return
+	}
+
+	ctx := context.Background()
+	var group models.Group
+	if err := h.DB.NewSelect().Model(&group).Where("id = ?", groupID).Scan(ctx); err != nil {
+		writeError(w, http.StatusNotFound, "group not found")
+		return
+	}
+
+	existing, err := h.DB.NewSelect().
+		Model((*models.Member)(nil)).
+		Where("group_id = ?", groupID).
+		Count(ctx)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to count members")
+		return
+	}
+	if existing >= group.MaxMembers {
+		writeError(w, http.StatusConflict, "group member limit reached")
+		return
+	}
+
+	member := &models.Member{
+		ID:            req.MemberID,
+		GroupID:       groupID,
+		WalletAddress: req.WalletAddress,
+		JoinedAt:      time.Now().UTC(),
+	}
+	if _, err := h.DB.NewInsert().Model(member).Exec(ctx); err != nil {
+		writeError(w, http.StatusConflict, "failed to join group (member may already exist)")
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, member)
+}
+
+func (h *Handler) Contribute(w http.ResponseWriter, r *http.Request) {
+	groupID := chi.URLParam(r, "groupID")
+	if strings.TrimSpace(groupID) == "" {
+		writeError(w, http.StatusBadRequest, "groupID is required")
+		return
+	}
+
+	var req contributeRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	if strings.TrimSpace(req.MemberID) == "" || strings.TrimSpace(req.WalletAddress) == "" {
+		writeError(w, http.StatusBadRequest, "member_id and wallet_address are required")
+		return
+	}
+	if req.Amount <= 0 {
+		writeError(w, http.StatusBadRequest, "amount must be > 0")
+		return
+	}
+	if req.CycleNumber <= 0 {
+		writeError(w, http.StatusBadRequest, "cycle_number must be > 0")
+		return
+	}
+
+	ctx := context.Background()
+	var group models.Group
+	if err := h.DB.NewSelect().Model(&group).Where("id = ?", groupID).Scan(ctx); err != nil {
+		writeError(w, http.StatusNotFound, "group not found")
+		return
+	}
+
+	var member models.Member
+	err := h.DB.NewSelect().Model(&member).Where("id = ?", req.MemberID).Scan(ctx)
+	if err != nil {
+		if !errors.Is(err, sql.ErrNoRows) {
+			writeError(w, http.StatusInternalServerError, "failed to fetch member")
+			return
+		}
+		member = models.Member{
+			ID:            req.MemberID,
+			GroupID:       groupID,
+			WalletAddress: req.WalletAddress,
+			JoinedAt:      time.Now().UTC(),
+		}
+		if _, err := h.DB.NewInsert().Model(&member).Exec(ctx); err != nil {
+			writeError(w, http.StatusInternalServerError, "failed to create member")
+			return
+		}
+	}
+
+	contribution := &models.Contribution{
+		GroupID:     groupID,
+		MemberID:    req.MemberID,
+		Amount:      req.Amount,
+		CycleNumber: req.CycleNumber,
+		TxSignature: req.TxSignature,
+		PaidAt:      time.Now().UTC(),
+	}
+	if _, err := h.DB.NewInsert().Model(contribution).Exec(ctx); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to save contribution")
+		return
+	}
+
+	member.TotalContributed += req.Amount
+	if req.OnTime {
+		member.CreditScore += 1
+	}
+	if _, err := h.DB.NewUpdate().
+		Model(&member).
+		Column("total_contributed", "credit_score").
+		WherePK().
+		Exec(ctx); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to update member totals")
+		return
+	}
+
+	group.VaultBalance += req.Amount
+	if req.CycleNumber > group.CycleCount {
+		group.CycleCount = req.CycleNumber
+	}
+	group.UpdatedAt = time.Now().UTC()
+	if _, err := h.DB.NewUpdate().
+		Model(&group).
+		Column("vault_balance", "cycle_count", "updated_at").
+		WherePK().
+		Exec(ctx); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to update group")
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, map[string]any{
+		"group_id":      groupID,
+		"member_id":     member.ID,
+		"amount":        req.Amount,
+		"vault_balance": group.VaultBalance,
+		"credit_score":  member.CreditScore,
+		"cycle_number":  group.CycleCount,
+	})
+}
+
+type createYieldEventRequest struct {
+	AmountDeposited int64      `json:"amount_deposited"`
+	Protocol        string     `json:"protocol"`
+	APY             float64    `json:"apy"`
+	TxSignature     string     `json:"tx_signature"`
+	CreatedAt       *time.Time `json:"created_at,omitempty"`
+}
+
+func (h *Handler) CreateYieldEvent(w http.ResponseWriter, r *http.Request) {
+	groupID := chi.URLParam(r, "groupID")
+	if strings.TrimSpace(groupID) == "" {
+		writeError(w, http.StatusBadRequest, "groupID is required")
+		return
+	}
+
+	var req createYieldEventRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	if req.AmountDeposited <= 0 {
+		writeError(w, http.StatusBadRequest, "amount_deposited must be > 0")
+		return
+	}
+	if strings.TrimSpace(req.Protocol) == "" {
+		writeError(w, http.StatusBadRequest, "protocol is required")
+		return
+	}
+
+	createdAt := time.Now().UTC()
+	if req.CreatedAt != nil {
+		createdAt = req.CreatedAt.UTC()
+	}
+
+	event := &models.YieldEvent{
+		GroupID:         groupID,
+		AmountDeposited: req.AmountDeposited,
+		Protocol:        strings.ToLower(req.Protocol),
+		APY:             req.APY,
+		TxSignature:     req.TxSignature,
+		CreatedAt:       createdAt,
+	}
+
+	ctx := context.Background()
+	if _, err := h.DB.NewInsert().Model(event).Exec(ctx); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to create yield event")
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, event)
+}
+
+type swigConfigRequest struct {
+	SwigVaultAddr string `json:"swig_vault_addr"`
+	SwigQuorum    int    `json:"swig_quorum"`
+}
+
+func (h *Handler) ConfigureSwig(w http.ResponseWriter, r *http.Request) {
+	groupID := chi.URLParam(r, "groupID")
+	if strings.TrimSpace(groupID) == "" {
+		writeError(w, http.StatusBadRequest, "groupID is required")
+		return
+	}
+
+	var req swigConfigRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	if strings.TrimSpace(req.SwigVaultAddr) == "" || req.SwigQuorum <= 0 {
+		writeError(w, http.StatusBadRequest, "swig_vault_addr and positive swig_quorum are required")
+		return
+	}
+
+	ctx := context.Background()
+	if _, err := h.DB.NewUpdate().
+		Model((*models.Group)(nil)).
+		Set("swig_vault_addr = ?", req.SwigVaultAddr).
+		Set("swig_quorum = ?", req.SwigQuorum).
+		Set("updated_at = ?", time.Now().UTC()).
+		Where("id = ?", groupID).
+		Exec(ctx); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to store swig config")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"group_id":        groupID,
+		"swig_vault_addr": req.SwigVaultAddr,
+		"swig_quorum":     req.SwigQuorum,
+	})
+}
+
+type tokenConfigRequest struct {
+	GroupTokenMint  string `json:"group_token_mint"`
+	TransferHookPID string `json:"transfer_hook_pid"`
+}
+
+func (h *Handler) ConfigureToken2022(w http.ResponseWriter, r *http.Request) {
+	groupID := chi.URLParam(r, "groupID")
+	if strings.TrimSpace(groupID) == "" {
+		writeError(w, http.StatusBadRequest, "groupID is required")
+		return
+	}
+
+	var req tokenConfigRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+	if strings.TrimSpace(req.GroupTokenMint) == "" || strings.TrimSpace(req.TransferHookPID) == "" {
+		writeError(w, http.StatusBadRequest, "group_token_mint and transfer_hook_pid are required")
+		return
+	}
+
+	ctx := context.Background()
+	if _, err := h.DB.NewUpdate().
+		Model((*models.Group)(nil)).
+		Set("group_token_mint = ?", req.GroupTokenMint).
+		Set("transfer_hook_pid = ?", req.TransferHookPID).
+		Set("updated_at = ?", time.Now().UTC()).
+		Where("id = ?", groupID).
+		Exec(ctx); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to store token config")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{
+		"group_id":          groupID,
+		"group_token_mint":  req.GroupTokenMint,
+		"transfer_hook_pid": req.TransferHookPID,
+	})
+}
+
+func (h *Handler) GetGroupExplorerLinks(w http.ResponseWriter, r *http.Request) {
+	groupID := chi.URLParam(r, "groupID")
+	if strings.TrimSpace(groupID) == "" {
+		writeError(w, http.StatusBadRequest, "groupID is required")
+		return
+	}
+
+	ctx := context.Background()
+	var group models.Group
+	if err := h.DB.NewSelect().Model(&group).Where("id = ?", groupID).Scan(ctx); err != nil {
+		writeError(w, http.StatusNotFound, "group not found")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{
+		"group_pda":     group.OnChainPDA,
+		"group_pda_url": fmt.Sprintf("https://explorer.solana.com/address/%s?cluster=devnet", group.OnChainPDA),
+		"vault_addr":    group.SwigVaultAddr,
+		"vault_url":     fmt.Sprintf("https://explorer.solana.com/address/%s?cluster=devnet", group.SwigVaultAddr),
+		"token_mint":    group.GroupTokenMint,
+		"token_url":     fmt.Sprintf("https://explorer.solana.com/address/%s?cluster=devnet", group.GroupTokenMint),
+	})
+}
+
+type runAgentRequest struct {
+	GroupID string `json:"group_id,omitempty"`
+	DryRun  bool   `json:"dry_run"`
+}
+
+func (h *Handler) RunTreasuryAgent(w http.ResponseWriter, r *http.Request) {
+	var req runAgentRequest
+	_ = json.NewDecoder(r.Body).Decode(&req)
+
+	ctx := context.Background()
+	var groups []models.Group
+	query := h.DB.NewSelect().Model(&groups).Order("created_at DESC")
+	if strings.TrimSpace(req.GroupID) != "" {
+		query = query.Where("id = ?", req.GroupID)
+	}
+	if err := query.Scan(ctx); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to load groups")
+		return
+	}
+	if len(groups) == 0 {
+		writeJSON(w, http.StatusOK, map[string]any{"results": []any{}})
+		return
+	}
+
+	cfg := treasury.AgentConfig{
+		MinReserveLamports: h.Config.MinReserveLamports,
+		DeployPercent:      h.Config.DeployPercent,
+		KaminoAPYBps:       h.Config.KaminoAPYBps,
+		JitoAPYBps:         h.Config.JitoAPYBps,
+	}
+
+	results := make([]*treasury.AgentResult, 0, len(groups))
+	for _, group := range groups {
+		result, err := treasury.RunOnce(ctx, h.DB, cfg, group, req.DryRun)
+		if err != nil {
+			results = append(results, &treasury.AgentResult{
+				GroupID: group.ID,
+				Status:  "failed",
+				Reason:  err.Error(),
+			})
+			continue
+		}
+		results = append(results, result)
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"run_at":  time.Now().UTC(),
+		"dry_run": req.DryRun,
+		"results": results,
+	})
+}
+
+func (h *Handler) SolanaWalletBalance(w http.ResponseWriter, r *http.Request) {
+	address := strings.TrimSpace(r.URL.Query().Get("address"))
+	if address == "" {
+		writeError(w, http.StatusBadRequest, "address query param is required")
+		return
+	}
+
+	balance, err := h.Web3.GetBalanceLamports(r.Context(), address)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, "failed to fetch balance from Solana RPC")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"address":        address,
+		"lamports":       balance,
+		"sol":            float64(balance) / 1_000_000_000,
+		"solana_rpc_url": h.Config.SolanaRPCURL,
+	})
+}
+
+type heliusWebhookPayload struct {
+	Type      string `json:"type"`
+	Signature string `json:"signature"`
+	GroupID   string `json:"group_id"`
+}
+
+func (h *Handler) HeliusWebhook(w http.ResponseWriter, r *http.Request) {
+	var payload map[string]any
+	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+
+	raw, _ := json.Marshal(payload)
+	meta := heliusWebhookPayload{
+		Type:      "unknown",
+		Signature: "",
+		GroupID:   "",
+	}
+	if v, ok := payload["type"].(string); ok {
+		meta.Type = v
+	}
+	if v, ok := payload["signature"].(string); ok {
+		meta.Signature = v
+	}
+	if v, ok := payload["group_id"].(string); ok {
+		meta.GroupID = v
+	}
+
+	event := &models.ChainEvent{
+		GroupID:    meta.GroupID,
+		EventType:  meta.Type,
+		Signature:  meta.Signature,
+		RawPayload: string(raw),
+		CreatedAt:  time.Now().UTC(),
+	}
+	if _, err := h.DB.NewInsert().Model(event).Exec(context.Background()); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to persist helius webhook")
+		return
+	}
+
+	writeJSON(w, http.StatusAccepted, map[string]string{"status": "accepted"})
 }

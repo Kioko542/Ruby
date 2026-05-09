@@ -1,4 +1,4 @@
-package main
+package models
 
 import (
 	"time"
@@ -6,7 +6,7 @@ import (
 	"github.com/uptrace/bun"
 )
 
-// Group mirrors the on-chain GroupTable + off-chain metadata
+// Group mirrors the on-chain GroupTable + off-chain metadata.
 type Group struct {
 	bun.BaseModel `bun:"table:groups,alias:g"`
 
@@ -18,6 +18,9 @@ type Group struct {
 	MaxMembers      int       `bun:"max_members,default:10" json:"max_members"`
 	VaultBalance    int64     `bun:"vault_balance,default:0" json:"vault_balance"`
 	SwigVaultAddr   string    `bun:"swig_vault_addr" json:"swig_vault_addr"`
+	SwigQuorum      int       `bun:"swig_quorum,default:0" json:"swig_quorum"`
+	GroupTokenMint  string    `bun:"group_token_mint" json:"group_token_mint"`
+	TransferHookPID string    `bun:"transfer_hook_pid" json:"transfer_hook_pid"`
 	OnChainPDA      string    `bun:"on_chain_pda" json:"on_chain_pda"`
 	CreatedAt       time.Time `bun:"created_at,default:current_timestamp" json:"created_at"`
 	UpdatedAt       time.Time `bun:"updated_at,default:current_timestamp" json:"updated_at"`
@@ -25,7 +28,19 @@ type Group struct {
 	Members []*Member `bun:"rel:has-many,join:id=group_id" json:"members,omitempty"`
 }
 
-// Member mirrors the on-chain MemberRecord
+// ChainEvent stores webhook payload metadata from Helius.
+type ChainEvent struct {
+	bun.BaseModel `bun:"table:chain_events,alias:ce"`
+
+	ID         int64     `bun:"id,pk,autoincrement" json:"id"`
+	GroupID    string    `bun:"group_id" json:"group_id"`
+	EventType  string    `bun:"event_type,notnull" json:"event_type"`
+	Signature  string    `bun:"signature" json:"signature"`
+	RawPayload string    `bun:"raw_payload,type:text,notnull" json:"raw_payload"`
+	CreatedAt  time.Time `bun:"created_at,default:current_timestamp" json:"created_at"`
+}
+
+// Member mirrors the on-chain MemberRecord.
 type Member struct {
 	bun.BaseModel `bun:"table:members,alias:m"`
 
@@ -37,7 +52,7 @@ type Member struct {
 	JoinedAt         time.Time `bun:"joined_at,default:current_timestamp" json:"joined_at"`
 }
 
-// YieldEvent is written by the AI TreasuryAgent after each DeFi deposit
+// YieldEvent is written by the AI Treasury Agent after each DeFi deposit.
 type YieldEvent struct {
 	bun.BaseModel `bun:"table:yield_events,alias:ye"`
 
@@ -50,7 +65,7 @@ type YieldEvent struct {
 	CreatedAt       time.Time `bun:"created_at,default:current_timestamp" json:"created_at"`
 }
 
-// Contribution tracks each member's payment per cycle
+// Contribution tracks each member's payment per cycle.
 type Contribution struct {
 	bun.BaseModel `bun:"table:contributions,alias:c"`
 

@@ -20,7 +20,7 @@ func main() {
 	database := db.New(cfg.DatabaseURL)
 	defer database.Close()
 
-	h := handlers.New(database)
+	h := handlers.New(database, cfg)
 
 	r := chi.NewRouter()
 
@@ -37,11 +37,17 @@ func main() {
 	r.Route("/api/v1", func(r chi.Router) {
 		// Groups
 		r.Get("/groups", h.ListGroups)
+		r.Post("/groups", h.CreateGroup)
+		r.Post("/groups/{groupID}/join", h.JoinGroup)
+		r.Post("/groups/{groupID}/contribute", h.Contribute)
+		r.Post("/groups/{groupID}/swig", h.ConfigureSwig)
+		r.Post("/groups/{groupID}/token", h.ConfigureToken2022)
+		r.Get("/groups/{groupID}/explorer", h.GetGroupExplorerLinks)
 		r.Get("/groups/{groupID}/yield", h.GetGroupYield)
-
-		// TODO Phase 2: POST /groups (create group — web3 DRI)
-		// TODO Phase 2: POST /groups/{groupID}/contribute (web3 DRI)
-		// TODO Phase 3: POST /groups/{groupID}/yield (agent writes here)
+		r.Post("/groups/{groupID}/yield", h.CreateYieldEvent)
+		r.Post("/agent/run", h.RunTreasuryAgent)
+		r.Get("/web3/balance", h.SolanaWalletBalance)
+		r.Post("/webhooks/helius", h.HeliusWebhook)
 	})
 
 	addr := fmt.Sprintf(":%s", cfg.Port)
