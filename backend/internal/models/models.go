@@ -79,6 +79,70 @@ type ReferralAttribution struct {
 	CreatedAt        time.Time `bun:"created_at,default:current_timestamp" json:"created_at"`
 }
 
+// SwigProposal tracks treasury actions requiring multisig approvals.
+type SwigProposal struct {
+	bun.BaseModel `bun:"table:swig_proposals,alias:sp"`
+
+	ID                string     `bun:"id,pk" json:"id"`
+	GroupID           string     `bun:"group_id,notnull" json:"group_id"`
+	Title             string     `bun:"title,notnull" json:"title"`
+	Kind              string     `bun:"kind,notnull" json:"kind"` // emergency_loan | treasury_withdrawal
+	AmountLamports    int64      `bun:"amount_lamports,notnull" json:"amount_lamports"`
+	ApprovalsRequired int        `bun:"approvals_required,notnull" json:"approvals_required"`
+	ApprovalsCount    int        `bun:"approvals_count,default:0" json:"approvals_count"`
+	Status            string     `bun:"status,notnull" json:"status"` // pending | approved | executed
+	CreatedByMemberID string     `bun:"created_by_member_id,notnull" json:"created_by_member_id"`
+	CreatedAt         time.Time  `bun:"created_at,default:current_timestamp" json:"created_at"`
+	ExecutedAt        *time.Time `bun:"executed_at" json:"executed_at,omitempty"`
+}
+
+type SwigProposalApproval struct {
+	bun.BaseModel `bun:"table:swig_proposal_approvals,alias:spa"`
+
+	ID         int64     `bun:"id,pk,autoincrement" json:"id"`
+	ProposalID string    `bun:"proposal_id,notnull" json:"proposal_id"`
+	MemberID   string    `bun:"member_id,notnull" json:"member_id"`
+	Wallet     string    `bun:"wallet,notnull" json:"wallet"`
+	ApprovedAt time.Time `bun:"approved_at,default:current_timestamp" json:"approved_at"`
+}
+
+// LoanRequest keeps a lightweight voting-only loan flow for hackathon scope.
+type LoanRequest struct {
+	bun.BaseModel `bun:"table:loan_requests,alias:lr"`
+
+	ID               string    `bun:"id,pk" json:"id"`
+	GroupID          string    `bun:"group_id,notnull" json:"group_id"`
+	BorrowerMemberID string    `bun:"borrower_member_id,notnull" json:"borrower_member_id"`
+	AmountLamports   int64     `bun:"amount_lamports,notnull" json:"amount_lamports"`
+	Reason           string    `bun:"reason" json:"reason"`
+	Status           string    `bun:"status,notnull" json:"status"` // pending | approved | rejected
+	CreatedAt        time.Time `bun:"created_at,default:current_timestamp" json:"created_at"`
+}
+
+type LoanVote struct {
+	bun.BaseModel `bun:"table:loan_votes,alias:lv"`
+
+	ID       int64     `bun:"id,pk,autoincrement" json:"id"`
+	LoanID   string    `bun:"loan_id,notnull" json:"loan_id"`
+	MemberID string    `bun:"member_id,notnull" json:"member_id"`
+	Vote     string    `bun:"vote,notnull" json:"vote"` // approve | reject
+	VotedAt  time.Time `bun:"voted_at,default:current_timestamp" json:"voted_at"`
+}
+
+// BlinkAction tracks generated and executed blink actions.
+type BlinkAction struct {
+	bun.BaseModel `bun:"table:blink_actions,alias:ba"`
+
+	ID        string    `bun:"id,pk" json:"id"`
+	BlinkType string    `bun:"blink_type,notnull" json:"blink_type"` // contribute | vote | withdraw
+	GroupID   string    `bun:"group_id,notnull" json:"group_id"`
+	MemberID  string    `bun:"member_id" json:"member_id"`
+	Payload   string    `bun:"payload,type:text,notnull" json:"payload"`
+	Status    string    `bun:"status,notnull" json:"status"` // created | executed | failed
+	CreatedAt time.Time `bun:"created_at,default:current_timestamp" json:"created_at"`
+	UpdatedAt time.Time `bun:"updated_at,default:current_timestamp" json:"updated_at"`
+}
+
 // YieldEvent is written by the AI Treasury Agent after each DeFi deposit.
 type YieldEvent struct {
 	bun.BaseModel `bun:"table:yield_events,alias:ye"`

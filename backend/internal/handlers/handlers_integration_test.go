@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -173,5 +174,132 @@ func TestInviteCodeRoundTrip(t *testing.T) {
 	}
 	if gotGroup != groupID || gotReferrer != referrerID {
 		t.Fatalf("unexpected decoded values: group=%s referrer=%s", gotGroup, gotReferrer)
+	}
+}
+
+func TestProtectedRouteRejectsMissingBearer(t *testing.T) {
+	fake := &fakeAuthService{
+		principal: &auth.Principal{
+			SessionID: "sess_123",
+			UserID:    "user_123",
+			Provider:  "phantom",
+			ExpiresAt: time.Now().UTC().Add(30 * time.Minute),
+		},
+	}
+	h := &Handler{Auth: fake}
+
+	router := chi.NewRouter()
+	router.Group(func(r chi.Router) {
+		r.Use(auth.Middleware(fake))
+		r.Post("/api/v1/groups", h.CreateGroup)
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/groups", nil)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d", rr.Code)
+	}
+}
+
+func TestHeliusWebhookRejectsInvalidAPIKey(t *testing.T) {
+	h := &Handler{Config: &config.Config{HeliusAPIKey: "expected-key"}}
+	router := chi.NewRouter()
+	router.Post("/api/v1/webhooks/helius", h.HeliusWebhook)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/webhooks/helius", nil)
+	req.Header.Set("X-Helius-Api-Key", "wrong-key")
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d", rr.Code)
+	}
+}
+
+func TestOnchainConfigEndpoint(t *testing.T) {
+	h := &Handler{
+		Config: &config.Config{
+			RubyProgramID:      "ruby111",
+			SwigProgramID:      "swig111",
+			Token2022ProgramID: "token111",
+			AnchorIDLPath:      "missing.json",
+		},
+		Anchor: web3.NewAnchorClient(web3.ProgramConfig{
+			RubyProgramID:      "ruby111",
+			SwigProgramID:      "swig111",
+			Token2022ProgramID: "token111",
+			AnchorIDLPath:      "missing.json",
+		}),
+	}
+	router := chi.NewRouter()
+	router.Get("/api/v1/onchain/config", h.OnchainConfig)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/onchain/config", nil)
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+}
+
+func TestBuildTxEndpoint(t *testing.T) {
+	h := &Handler{
+		Anchor: web3.NewAnchorClient(web3.ProgramConfig{
+			RubyProgramID:      "ruby111",
+			SwigProgramID:      "swig111",
+			Token2022ProgramID: "token111",
+			AnchorIDLPath:      "missing.json",
+		}),
+	}
+	router := chi.NewRouter()
+	router.Post("/api/v1/tx/build/{action}", h.BuildTx)
+
+	body := strings.NewReader(`{"group_id":"g1","amount":1000}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/tx/build/create-group", body)
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+}
+
+func TestBuildTxEndpointRejectsUnsupportedAction(t *testing.T) {
+	h := &Handler{
+		Anchor: web3.NewAnchorClient(web3.ProgramConfig{
+			RubyProgramID:      "ruby111",
+			SwigProgramID:      "swig111",
+			Token2022ProgramID: "token111",
+			AnchorIDLPath:      "missing.json",
+		}),
+	}
+	router := chi.NewRouter()
+	router.Post("/api/v1/tx/build/{action}", h.BuildTx)
+
+	body := strings.NewReader(`{"group_id":"g1"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/tx/build/not-a-real-action", body)
+	req.Header.Set("Content-Type", "application/json")
+	rr := httptest.NewRecorder()
+	router.ServeHTTP(rr, req)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", rr.Code)
+	}
+}
+
+func TestHeliusWebhookAcceptsValidAPIKey(t *testing.T) {
+	h := &Handler{
+		Config: &config.Config{HeliusAPIKey: "expected-key"},
+	}
+	router := chi.NewRouter()
+	router.Post("/api/v1/webhooks/helius", h.HeliusWebhook)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/webhooks/helius", strings.NewReader(`{`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Helius-Api-Key", "expected-key")
+	rr := httptest.NewRecorder()
+	// with valid key, request reaches JSON validation and fails with 400.
+	router.ServeHTTP(rr, req)
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 after passing API key check, got %d", rr.Code)
 	}
 }

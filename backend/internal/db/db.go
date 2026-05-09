@@ -31,6 +31,11 @@ func ensureSchema(database *bun.DB) {
 		(*models.ChainEvent)(nil),
 		(*models.AuthSession)(nil),
 		(*models.ReferralAttribution)(nil),
+		(*models.SwigProposal)(nil),
+		(*models.SwigProposalApproval)(nil),
+		(*models.LoanRequest)(nil),
+		(*models.LoanVote)(nil),
+		(*models.BlinkAction)(nil),
 	} {
 		if _, err := database.NewCreateTable().
 			Model(model).
