@@ -15,6 +15,7 @@ import (
 	"github.com/dev3pack/ruby/backend/internal/auth"
 	"github.com/dev3pack/ruby/backend/internal/config"
 	"github.com/dev3pack/ruby/backend/internal/models"
+	"github.com/dev3pack/ruby/backend/internal/realtime"
 	"github.com/dev3pack/ruby/backend/internal/treasury"
 	"github.com/dev3pack/ruby/backend/internal/web3"
 	"github.com/go-chi/chi/v5"
@@ -25,7 +26,9 @@ type Handler struct {
 	DB     *bun.DB
 	Config *config.Config
 	Web3   *web3.Client
+	Anchor *web3.AnchorClient
 	Auth   AuthService
+	Hub    *realtime.Hub
 }
 
 type AuthService interface {
@@ -41,7 +44,14 @@ func NewHandler(db *bun.DB, cfg *config.Config) *Handler {
 		DB:     db,
 		Config: cfg,
 		Web3:   web3.NewClient(cfg.SolanaRPCURL),
+		Anchor: web3.NewAnchorClient(web3.ProgramConfig{
+			RubyProgramID:      cfg.RubyProgramID,
+			SwigProgramID:      cfg.SwigProgramID,
+			Token2022ProgramID: cfg.Token2022ProgramID,
+			AnchorIDLPath:      cfg.AnchorIDLPath,
+		}),
 		Auth:   auth.NewService(cfg, db),
+		Hub:    realtime.NewHub(),
 	}
 }
 
@@ -58,6 +68,13 @@ func writeJSON(w http.ResponseWriter, status int, payload any) {
 
 func writeError(w http.ResponseWriter, status int, message string) {
 	writeJSON(w, status, map[string]string{"error": message})
+}
+
+func (h *Handler) publish(eventType string, payload map[string]any) {
+	if h.Hub == nil {
+		return
+	}
+	h.Hub.Broadcast(eventType, payload)
 }
 
 func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
@@ -256,6 +273,7 @@ func (h *Handler) CreateGroup(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusCreated, group)
+	h.publish("group.created", map[string]any{"group_id": group.ID, "creator_wallet": group.CreatorWallet})
 }
 
 type contributeRequest struct {
@@ -491,6 +509,13 @@ func (h *Handler) JoinGroup(w http.ResponseWriter, r *http.Request) {
 		"referral_applied": referralApplied,
 		"referrer_member":  referrerID,
 	})
+	h.publish("group.joined", map[string]any{
+		"group_id":           groupID,
+		"member_id":          member.ID,
+		"wallet_address":     member.WalletAddress,
+		"referral_applied":   referralApplied,
+		"referrer_member_id": referrerID,
+	})
 }
 
 func (h *Handler) Contribute(w http.ResponseWriter, r *http.Request) {
@@ -592,6 +617,12 @@ func (h *Handler) Contribute(w http.ResponseWriter, r *http.Request) {
 		"credit_score":  member.CreditScore,
 		"cycle_number":  group.CycleCount,
 	})
+	h.publish("group.contribution", map[string]any{
+		"group_id":      groupID,
+		"member_id":     member.ID,
+		"amount":        req.Amount,
+		"vault_balance": group.VaultBalance,
+	})
 }
 
 type createYieldEventRequest struct {
@@ -644,6 +675,12 @@ func (h *Handler) CreateYieldEvent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusCreated, event)
+	h.publish("group.yield_event", map[string]any{
+		"group_id":         groupID,
+		"amount_deposited": event.AmountDeposited,
+		"protocol":         event.Protocol,
+		"apy":              event.APY,
+	})
 }
 
 type swigConfigRequest struct {
@@ -757,23 +794,18 @@ type runAgentRequest struct {
 	DryRun  bool   `json:"dry_run"`
 }
 
-func (h *Handler) RunTreasuryAgent(w http.ResponseWriter, r *http.Request) {
-	var req runAgentRequest
-	_ = json.NewDecoder(r.Body).Decode(&req)
-
+func (h *Handler) runTreasuryAgentInternal(groupID string, dryRun bool) ([]*treasury.AgentResult, error) {
 	ctx := context.Background()
 	var groups []models.Group
 	query := h.DB.NewSelect().Model(&groups).Order("created_at DESC")
-	if strings.TrimSpace(req.GroupID) != "" {
-		query = query.Where("id = ?", req.GroupID)
+	if strings.TrimSpace(groupID) != "" {
+		query = query.Where("id = ?", groupID)
 	}
 	if err := query.Scan(ctx); err != nil {
-		writeError(w, http.StatusInternalServerError, "failed to load groups")
-		return
+		return nil, err
 	}
 	if len(groups) == 0 {
-		writeJSON(w, http.StatusOK, map[string]any{"results": []any{}})
-		return
+		return []*treasury.AgentResult{}, nil
 	}
 
 	cfg := treasury.AgentConfig{
@@ -785,7 +817,7 @@ func (h *Handler) RunTreasuryAgent(w http.ResponseWriter, r *http.Request) {
 
 	results := make([]*treasury.AgentResult, 0, len(groups))
 	for _, group := range groups {
-		result, err := treasury.RunOnce(ctx, h.DB, cfg, group, req.DryRun)
+		result, err := treasury.RunOnce(ctx, h.DB, cfg, group, dryRun)
 		if err != nil {
 			results = append(results, &treasury.AgentResult{
 				GroupID: group.ID,
@@ -795,6 +827,25 @@ func (h *Handler) RunTreasuryAgent(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		results = append(results, result)
+		h.publish("agent.run.result", map[string]any{
+			"group_id":           result.GroupID,
+			"status":             result.Status,
+			"selected_protocol":  result.SelectedProtocol,
+			"selected_apy":       result.SelectedAPY,
+			"deposited_lamports": result.DepositedLamports,
+		})
+	}
+	return results, nil
+}
+
+func (h *Handler) RunTreasuryAgent(w http.ResponseWriter, r *http.Request) {
+	var req runAgentRequest
+	_ = json.NewDecoder(r.Body).Decode(&req)
+
+	results, err := h.runTreasuryAgentInternal(req.GroupID, req.DryRun)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to load groups")
+		return
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
@@ -802,6 +853,11 @@ func (h *Handler) RunTreasuryAgent(w http.ResponseWriter, r *http.Request) {
 		"dry_run": req.DryRun,
 		"results": results,
 	})
+}
+
+func (h *Handler) Run() error {
+	_, err := h.runTreasuryAgentInternal("", false)
+	return err
 }
 
 func (h *Handler) SolanaWalletBalance(w http.ResponseWriter, r *http.Request) {
@@ -832,6 +888,14 @@ type heliusWebhookPayload struct {
 }
 
 func (h *Handler) HeliusWebhook(w http.ResponseWriter, r *http.Request) {
+	if strings.TrimSpace(h.Config.HeliusAPIKey) != "" {
+		got := strings.TrimSpace(r.Header.Get("X-Helius-Api-Key"))
+		if got != h.Config.HeliusAPIKey {
+			writeError(w, http.StatusUnauthorized, "invalid helius api key")
+			return
+		}
+	}
+
 	var payload map[string]any
 	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid JSON body")
@@ -867,4 +931,9 @@ func (h *Handler) HeliusWebhook(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusAccepted, map[string]string{"status": "accepted"})
+	h.publish("helius.webhook", map[string]any{
+		"group_id":   meta.GroupID,
+		"event_type": meta.Type,
+		"signature":  meta.Signature,
+	})
 }

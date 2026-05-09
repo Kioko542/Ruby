@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/joho/godotenv"
 )
@@ -20,6 +21,13 @@ type Config struct {
 	PrivyIssuer        string
 	PrivyJWKSURL       string
 	AuthDomain         string
+	BlinkBaseURL       string
+	AgentAutoRun       bool
+	AgentIntervalSec   int64
+	RubyProgramID      string
+	SwigProgramID      string
+	Token2022ProgramID string
+	AnchorIDLPath      string
 	MinReserveLamports int64
 	DeployPercent      int64
 	KaminoAPYBps       int64
@@ -47,6 +55,13 @@ func Load() *Config {
 		PrivyIssuer:        envOrDefault("PRIVY_ISSUER", "https://auth.privy.io"),
 		PrivyJWKSURL:       os.Getenv("PRIVY_JWKS_URL"),
 		AuthDomain:         envOrDefault("AUTH_DOMAIN", "localhost:3000"),
+		BlinkBaseURL:       envOrDefault("BLINK_BASE_URL", "http://localhost:3000/blinks"),
+		AgentAutoRun:       envBool("AGENT_AUTO_RUN", false),
+		AgentIntervalSec:   envInt64("AGENT_INTERVAL_SECONDS", 86400),
+		RubyProgramID:      envOrDefault("RUBY_PROGRAM_ID", "RuBy111111111111111111111111111111111111111"),
+		SwigProgramID:      envOrDefault("SWIG_PROGRAM_ID", "Swig111111111111111111111111111111111111111"),
+		Token2022ProgramID: envOrDefault("TOKEN_2022_PROGRAM_ID", "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"),
+		AnchorIDLPath:      envOrDefault("ANCHOR_IDL_PATH", "../contracts/target/idl/ruby_protocol.json"),
 		MinReserveLamports: envInt64("MIN_RESERVE_LAMPORTS", 100_000_000),
 		DeployPercent:      envInt64("DEPLOY_PERCENT", 90),
 		KaminoAPYBps:       envInt64("KAMINO_APY_BPS", 750),
@@ -73,4 +88,18 @@ func envInt64(key string, fallback int64) int64 {
 		return fallback
 	}
 	return n
+}
+
+func envBool(key string, fallback bool) bool {
+	value := strings.TrimSpace(strings.ToLower(os.Getenv(key)))
+	switch value {
+	case "1", "true", "yes", "on":
+		return true
+	case "0", "false", "no", "off":
+		return false
+	case "":
+		return fallback
+	default:
+		return fallback
+	}
 }
