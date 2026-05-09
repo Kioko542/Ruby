@@ -1,0 +1,1009 @@
+{
+  "address": "BsHiSX9NmkNMTYP8UcAY71aKVZwcCgA2Tea1tmgeQbdv",
+  "metadata": {
+    "name": "ruby_protocol",
+    "version": "0.1.0",
+    "spec": "0.1.0",
+    "description": "Ruby protocol core on-chain program"
+  },
+  "instructions": [
+    {
+      "name": "approve_swig_proposal",
+      "discriminator": [
+        68,
+        231,
+        239,
+        24,
+        231,
+        77,
+        67,
+        53
+      ],
+      "accounts": [
+        {
+          "name": "member_wallet",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "group"
+        },
+        {
+          "name": "member"
+        },
+        {
+          "name": "proposal",
+          "writable": true
+        },
+        {
+          "name": "approval",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  97,
+                  112,
+                  112,
+                  114,
+                  111,
+                  118,
+                  97,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "proposal"
+              },
+              {
+                "kind": "account",
+                "path": "member"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "contribute",
+      "discriminator": [
+        82,
+        33,
+        68,
+        131,
+        32,
+        0,
+        205,
+        95
+      ],
+      "accounts": [
+        {
+          "name": "member_wallet",
+          "signer": true
+        },
+        {
+          "name": "group",
+          "writable": true,
+          "relations": [
+            "member"
+          ]
+        },
+        {
+          "name": "member",
+          "writable": true
+        }
+      ],
+      "args": [
+        {
+          "name": "amount",
+          "type": "u64"
+        },
+        {
+          "name": "on_time",
+          "type": "bool"
+        }
+      ]
+    },
+    {
+      "name": "create_blink_action",
+      "discriminator": [
+        149,
+        55,
+        18,
+        227,
+        209,
+        227,
+        78,
+        171
+      ],
+      "accounts": [
+        {
+          "name": "member_wallet",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "group"
+        },
+        {
+          "name": "member"
+        },
+        {
+          "name": "blink_action",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  108,
+                  105,
+                  110,
+                  107
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "group"
+              },
+              {
+                "kind": "account",
+                "path": "member"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "blink_type",
+          "type": "u8"
+        }
+      ]
+    },
+    {
+      "name": "create_group",
+      "discriminator": [
+        79,
+        60,
+        158,
+        134,
+        61,
+        199,
+        56,
+        248
+      ],
+      "accounts": [
+        {
+          "name": "creator",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "group",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  103,
+                  114,
+                  111,
+                  117,
+                  112
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "group_id"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "group_id",
+          "type": "string"
+        },
+        {
+          "name": "contribution_lamports",
+          "type": "u64"
+        },
+        {
+          "name": "max_members",
+          "type": "u8"
+        }
+      ]
+    },
+    {
+      "name": "create_loan_request",
+      "discriminator": [
+        98,
+        217,
+        110,
+        114,
+        5,
+        69,
+        35,
+        204
+      ],
+      "accounts": [
+        {
+          "name": "borrower_wallet",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "group"
+        },
+        {
+          "name": "member"
+        },
+        {
+          "name": "loan",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  111,
+                  97,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "group"
+              },
+              {
+                "kind": "account",
+                "path": "borrower_wallet"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount_lamports",
+          "type": "u64"
+        }
+      ]
+    },
+    {
+      "name": "create_swig_proposal",
+      "discriminator": [
+        160,
+        68,
+        167,
+        111,
+        189,
+        55,
+        145,
+        19
+      ],
+      "accounts": [
+        {
+          "name": "member_wallet",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "group"
+        },
+        {
+          "name": "member"
+        },
+        {
+          "name": "proposal",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  112,
+                  114,
+                  111,
+                  112,
+                  111,
+                  115,
+                  97,
+                  108
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "group"
+              },
+              {
+                "kind": "account",
+                "path": "member_wallet"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "kind",
+          "type": "u8"
+        },
+        {
+          "name": "amount_lamports",
+          "type": "u64"
+        },
+        {
+          "name": "approvals_required",
+          "type": "u8"
+        }
+      ]
+    },
+    {
+      "name": "execute_blink_action",
+      "discriminator": [
+        190,
+        210,
+        148,
+        179,
+        89,
+        67,
+        105,
+        31
+      ],
+      "accounts": [
+        {
+          "name": "member_wallet",
+          "signer": true
+        },
+        {
+          "name": "blink_action",
+          "writable": true
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "join_group",
+      "discriminator": [
+        121,
+        56,
+        199,
+        19,
+        250,
+        70,
+        44,
+        184
+      ],
+      "accounts": [
+        {
+          "name": "member_wallet",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "group",
+          "writable": true
+        },
+        {
+          "name": "member",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  101,
+                  109,
+                  98,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "group"
+              },
+              {
+                "kind": "account",
+                "path": "member_wallet"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "record_yield_event",
+      "discriminator": [
+        12,
+        68,
+        66,
+        10,
+        233,
+        206,
+        58,
+        214
+      ],
+      "accounts": [
+        {
+          "name": "agent_wallet",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "group"
+        },
+        {
+          "name": "yield_event",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  121,
+                  105,
+                  101,
+                  108,
+                  100
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "group"
+              },
+              {
+                "kind": "account",
+                "path": "agent_wallet"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "amount_lamports",
+          "type": "u64"
+        },
+        {
+          "name": "protocol",
+          "type": "u8"
+        },
+        {
+          "name": "apy_bps",
+          "type": "u16"
+        }
+      ]
+    },
+    {
+      "name": "vote_loan_request",
+      "discriminator": [
+        10,
+        56,
+        59,
+        136,
+        153,
+        222,
+        172,
+        219
+      ],
+      "accounts": [
+        {
+          "name": "member_wallet",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "group"
+        },
+        {
+          "name": "member"
+        },
+        {
+          "name": "loan",
+          "writable": true
+        },
+        {
+          "name": "vote",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  108,
+                  111,
+                  97,
+                  110,
+                  95,
+                  118,
+                  111,
+                  116,
+                  101
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "loan"
+              },
+              {
+                "kind": "account",
+                "path": "member"
+              }
+            ]
+          }
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "approve",
+          "type": "bool"
+        }
+      ]
+    }
+  ],
+  "accounts": [
+    {
+      "name": "ApprovalAccount",
+      "discriminator": [
+        169,
+        84,
+        59,
+        29,
+        166,
+        124,
+        3,
+        234
+      ]
+    },
+    {
+      "name": "BlinkActionAccount",
+      "discriminator": [
+        112,
+        126,
+        133,
+        113,
+        102,
+        75,
+        9,
+        143
+      ]
+    },
+    {
+      "name": "GroupAccount",
+      "discriminator": [
+        12,
+        42,
+        207,
+        53,
+        238,
+        29,
+        151,
+        111
+      ]
+    },
+    {
+      "name": "LoanRequestAccount",
+      "discriminator": [
+        7,
+        45,
+        219,
+        18,
+        145,
+        61,
+        217,
+        170
+      ]
+    },
+    {
+      "name": "LoanVoteAccount",
+      "discriminator": [
+        130,
+        189,
+        102,
+        245,
+        65,
+        18,
+        150,
+        213
+      ]
+    },
+    {
+      "name": "MemberAccount",
+      "discriminator": [
+        173,
+        25,
+        100,
+        97,
+        192,
+        177,
+        84,
+        139
+      ]
+    },
+    {
+      "name": "SwigProposalAccount",
+      "discriminator": [
+        19,
+        157,
+        13,
+        173,
+        191,
+        66,
+        127,
+        43
+      ]
+    },
+    {
+      "name": "YieldEventAccount",
+      "discriminator": [
+        153,
+        255,
+        166,
+        237,
+        108,
+        0,
+        162,
+        179
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "InvalidMaxMembers",
+      "msg": "Invalid max members. Must be between 1 and 10."
+    },
+    {
+      "code": 6001,
+      "name": "GroupFull",
+      "msg": "Group has reached max members."
+    },
+    {
+      "code": 6002,
+      "name": "InvalidApprovalsRequired",
+      "msg": "Invalid approvals_required."
+    },
+    {
+      "code": 6003,
+      "name": "MemberWalletMismatch",
+      "msg": "Member wallet mismatch."
+    }
+  ],
+  "types": [
+    {
+      "name": "ApprovalAccount",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "proposal",
+            "type": "pubkey"
+          },
+          {
+            "name": "member",
+            "type": "pubkey"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "BlinkActionAccount",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "group",
+            "type": "pubkey"
+          },
+          {
+            "name": "member",
+            "type": "pubkey"
+          },
+          {
+            "name": "blink_type",
+            "type": "u8"
+          },
+          {
+            "name": "status",
+            "type": {
+              "defined": {
+                "name": "BlinkStatus"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "BlinkStatus",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Created"
+          },
+          {
+            "name": "Executed"
+          },
+          {
+            "name": "Failed"
+          }
+        ]
+      }
+    },
+    {
+      "name": "GroupAccount",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "group_id",
+            "type": "string"
+          },
+          {
+            "name": "creator",
+            "type": "pubkey"
+          },
+          {
+            "name": "contribution_lamports",
+            "type": "u64"
+          },
+          {
+            "name": "max_members",
+            "type": "u8"
+          },
+          {
+            "name": "member_count",
+            "type": "u8"
+          },
+          {
+            "name": "vault_balance",
+            "type": "u64"
+          },
+          {
+            "name": "cycles",
+            "type": "u32"
+          }
+        ]
+      }
+    },
+    {
+      "name": "LoanRequestAccount",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "group",
+            "type": "pubkey"
+          },
+          {
+            "name": "borrower",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount_lamports",
+            "type": "u64"
+          },
+          {
+            "name": "approvals",
+            "type": "u8"
+          },
+          {
+            "name": "rejections",
+            "type": "u8"
+          },
+          {
+            "name": "status",
+            "type": {
+              "defined": {
+                "name": "LoanStatus"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "LoanStatus",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Pending"
+          },
+          {
+            "name": "Approved"
+          },
+          {
+            "name": "Rejected"
+          }
+        ]
+      }
+    },
+    {
+      "name": "LoanVoteAccount",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "loan",
+            "type": "pubkey"
+          },
+          {
+            "name": "member",
+            "type": "pubkey"
+          },
+          {
+            "name": "approve",
+            "type": "bool"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "MemberAccount",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "group",
+            "type": "pubkey"
+          },
+          {
+            "name": "wallet",
+            "type": "pubkey"
+          },
+          {
+            "name": "total_contributed",
+            "type": "u64"
+          },
+          {
+            "name": "credit_score",
+            "type": "u32"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ProposalStatus",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Pending"
+          },
+          {
+            "name": "Approved"
+          },
+          {
+            "name": "Executed"
+          }
+        ]
+      }
+    },
+    {
+      "name": "SwigProposalAccount",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "group",
+            "type": "pubkey"
+          },
+          {
+            "name": "kind",
+            "type": "u8"
+          },
+          {
+            "name": "amount_lamports",
+            "type": "u64"
+          },
+          {
+            "name": "approvals_required",
+            "type": "u8"
+          },
+          {
+            "name": "approvals_count",
+            "type": "u8"
+          },
+          {
+            "name": "status",
+            "type": {
+              "defined": {
+                "name": "ProposalStatus"
+              }
+            }
+          },
+          {
+            "name": "created_by",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "YieldEventAccount",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "group",
+            "type": "pubkey"
+          },
+          {
+            "name": "amount_lamports",
+            "type": "u64"
+          },
+          {
+            "name": "protocol",
+            "type": "u8"
+          },
+          {
+            "name": "apy_bps",
+            "type": "u16"
+          },
+          {
+            "name": "recorded_at",
+            "type": "i64"
+          }
+        ]
+      }
+    }
+  ]
+}
