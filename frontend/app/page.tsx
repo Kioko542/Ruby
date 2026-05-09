@@ -1,4 +1,5 @@
 "use client";
+<<<<<<< HEAD
 import { useWalletConnection } from "@solana/react-hooks";
 import { useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
@@ -214,62 +215,250 @@ export default function Home() {
             </li>
           </ul>
         </header>
+=======
 
-        <section className="w-full max-w-3xl space-y-4 rounded-2xl border border-border-low bg-card p-6 shadow-[0_20px_80px_-50px_rgba(0,0,0,0.35)]">
-          <div className="flex items-start justify-between gap-4">
-            <div className="space-y-1">
-              <p className="text-lg font-semibold">Wallet connection</p>
-              <p className="text-sm text-muted">
-                Pick any discovered connector and manage connect / disconnect in
-                one spot.
+import { useState } from "react";
+import { useRouter } from "next/navigation";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogTrigger } from "@/components/ui/dialog";
+import { Header } from "@/components/layout/header";
+import { LoginForm } from "@/components/auth/login-form";
+import { Users, UserPlus, Bot, Shield, TrendingUp, Sparkles, CheckCircle2, Wallet } from "lucide-react";
+
+const flowSteps = [
+  {
+    title: "Create group",
+    description: "Launch a savings circle on-chain in seconds with group governance built in.",
+    icon: Users,
+  },
+  {
+    title: "Invite friends",
+    description: "Share a link or code so everyone joins the same vault without manual tracking.",
+    icon: UserPlus,
+  },
+  {
+    title: "Autopilot yield",
+    description: "Idle funds are deployed into DeFi yield protocols automatically.",
+    icon: Bot,
+  },
+];
+
+const trustLogos = ["Dev3pack", "Solana Devnet", "Hackathon 2026"];
+
+export default function Home() {
+  const [showLogin, setShowLogin] = useState(false);
+  const [interestEmail, setInterestEmail] = useState("");
+  const router = useRouter();
+
+  const handleLoginSuccess = () => {
+    setShowLogin(false);
+    router.push("/dashboard");
+  };
+
+  return (
+    <div className="min-h-screen bg-white text-slate-950">
+      <Header onLoginClick={() => setShowLogin(true)} />
+>>>>>>> 5fb2cf0 (creation of auth pages and dashboard overview)
+
+      <main className="mx-auto max-w-7xl px-6 py-10 sm:px-8 lg:py-16">
+        <section className="grid gap-12 lg:grid-cols-[1.1fr_0.9fr]">
+          {/* Left Column */}
+          <div className="space-y-8">
+            {/* Badge */}
+            <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-xs font-semibold uppercase tracking-[0.26em] text-slate-500 shadow-sm">
+              <Sparkles className="h-3 w-3 text-amber-500" />
+              Project Ruby · Dev3pack Hackathon 2026
+            </div>
+
+            {/* Hero Section */}
+            <div className="space-y-6">
+              <h1 className="max-w-4xl text-4xl font-semibold tracking-tight text-slate-950 sm:text-5xl">
+                Save together. Earn yield. On autopilot.
+              </h1>
+              <p className="max-w-2xl text-lg leading-8 text-slate-600">
+                Ruby turns a savings circle into a fully autonomous protocol. No admin, no manual tracking — just trustless group savings with AI-powered yield.
               </p>
             </div>
-            <span className="rounded-full bg-cream px-3 py-1 text-xs font-semibold uppercase tracking-wide text-foreground/80">
-              {status === "connected" ? "Connected" : "Not connected"}
-            </span>
+
+            {/* CTA Buttons */}
+            <div className="flex flex-col gap-4 sm:flex-row">
+              <Dialog open={showLogin} onOpenChange={setShowLogin}>
+                <DialogTrigger asChild>
+                  <Button size="lg" className="rounded-full bg-slate-950 text-white hover:bg-slate-900">
+                    Start a Circle
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <LoginForm onSuccess={handleLoginSuccess} />
+                </DialogContent>
+              </Dialog>
+              <Button variant="outline" size="lg" className="rounded-full border-slate-300 text-slate-950 hover:bg-slate-100">
+                Explore roadmap
+              </Button>
+            </div>
+
+            {/* Flow Steps - Preserved original styling */}
+            <div className="rounded-[2rem] border border-slate-200 bg-white p-8 shadow-sm">
+              <div className="grid gap-4 md:grid-cols-3">
+                {flowSteps.map((step, index) => {
+                  const Icon = step.icon;
+                  return (
+                    <div key={step.title} className="space-y-3 rounded-3xl border border-slate-200 bg-slate-50 p-5">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-slate-950 text-white">
+                        <Icon className="h-5 w-5" />
+                      </div>
+                      <h3 className="text-lg font-semibold text-slate-950">{step.title}</h3>
+                      <p className="text-sm leading-6 text-slate-600">{step.description}</p>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* How Ruby Works + Early Access */}
+            <div className="grid gap-6 xl:grid-cols-[1.3fr_0.7fr]">
+              {/* How Ruby Works */}
+              <div className="rounded-[2rem] border border-slate-200 bg-white p-8 shadow-sm">
+                <h2 className="text-xl font-semibold text-slate-950">How Ruby works</h2>
+                <p className="mt-3 text-sm leading-7 text-slate-600">
+                  Ruby replaces savings circle admin work with on-chain automation and an AI TreasuryAgent that grows group funds while members save together.
+                </p>
+
+                <div className="mt-8 grid gap-4">
+                  <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Shield className="h-4 w-4 text-slate-950" />
+                      <p className="text-sm font-semibold text-slate-950">Group vault</p>
+                    </div>
+                    <p className="text-sm text-slate-600">Every contribution is recorded on-chain and stored in a programmable vault.</p>
+                  </div>
+                  <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
+                    <div className="flex items-center gap-2 mb-2">
+                      <Sparkles className="h-4 w-4 text-amber-500" />
+                      <p className="text-sm font-semibold text-slate-950">AI TreasuryAgent</p>
+                    </div>
+                    <p className="text-sm text-slate-600">Idle funds are automatically deployed to yield protocols automatically.</p>
+                  </div>
+                  <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
+                    <div className="flex items-center gap-2 mb-2">
+                      <TrendingUp className="h-4 w-4 text-green-500" />
+                      <p className="text-sm font-semibold text-slate-950">Transparent history</p>
+                    </div>
+                    <p className="text-sm text-slate-600">All actions are verifiable on-chain, so the group can trust the protocol over any admin.</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Early Access Card - Preserved original */}
+              <div className="rounded-[2rem] border border-slate-200 bg-white p-8 shadow-sm">
+                <div className="rounded-[1.75rem] border border-slate-200 bg-slate-950/5 p-6">
+                  <p className="text-sm uppercase tracking-[0.24em] text-slate-500">Launch interest</p>
+                  <p className="mt-4 text-2xl font-semibold text-slate-950">Get early access</p>
+                  <p className="mt-3 text-sm leading-6 text-slate-600">
+                    Enter your email and we’ll notify you once Ruby is ready for your first group.
+                  </p>
+
+                  <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+                    <Input
+                      value={interestEmail}
+                      onChange={(event) => setInterestEmail(event.target.value)}
+                      placeholder="Email address"
+                      className="flex-1 rounded-full border-slate-200 bg-white"
+                    />
+                    <Button className="rounded-full bg-slate-950 text-white hover:bg-slate-900">
+                      Notify me
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2">
-            {connectors.map((connector) => (
-              <button
-                key={connector.id}
-                onClick={() => connect(connector.id)}
-                disabled={status === "connecting"}
-                className="group flex items-center justify-between rounded-xl border border-border-low bg-card px-4 py-3 text-left text-sm font-medium transition hover:-translate-y-0.5 hover:shadow-sm cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                <span className="flex flex-col">
-                  <span className="text-base">{connector.name}</span>
-                  <span className="text-xs text-muted">
-                    {status === "connecting"
-                      ? "Connecting…"
-                      : status === "connected" &&
-                          wallet?.connector.id === connector.id
-                        ? "Active"
-                        : "Tap to connect"}
+          {/* Right Column - Preserved original structure */}
+          <aside className="space-y-8">
+            {/* Visual Card */}
+            <div className="rounded-[2rem] border border-slate-200 bg-white p-8 shadow-sm">
+              <div className="aspect-[4/3] rounded-[1.75rem] border border-slate-200 bg-gradient-to-br from-slate-950/5 via-white to-slate-50 p-6">
+                <div className="flex h-full flex-col justify-between rounded-[1.5rem] p-6">
+                  <div className="space-y-3">
+                    <div className="inline-flex items-center gap-2 rounded-full bg-white px-3 py-1 text-xs font-semibold uppercase tracking-[0.24em] text-slate-600 shadow-sm">
+                      Group circle
+                    </div>
+                    <h2 className="text-2xl font-semibold text-slate-950">Autopilot savings</h2>
+                    <p className="text-sm leading-6 text-slate-600">
+                      Visualize the circle, your group vault, and AI yield working together.
+                    </p>
+                  </div>
+                  <div className="grid gap-4 text-sm text-slate-600">
+                    <div className="rounded-3xl bg-white/90 p-4 shadow-sm">
+                      <div className="flex items-center gap-2">
+                        <Users className="h-4 w-4 text-slate-950" />
+                        <p className="font-semibold text-slate-950">Step 1</p>
+                      </div>
+                      <p>Create the group and invite trusted members.</p>
+                    </div>
+                    <div className="rounded-3xl bg-white/90 p-4 shadow-sm">
+                      <div className="flex items-center gap-2">
+                        <UserPlus className="h-4 w-4 text-slate-950" />
+                        <p className="font-semibold text-slate-950">Step 2</p>
+                      </div>
+                      <p>Members contribute to the vault and the protocol tracks every deposit.</p>
+                    </div>
+                    <div className="rounded-3xl bg-white/90 p-4 shadow-sm">
+                      <div className="flex items-center gap-2">
+                        <Bot className="h-4 w-4 text-slate-950" />
+                        <p className="font-semibold text-slate-950">Step 3</p>
+                      </div>
+                      <p>AI deploys idle funds into yield protocols automatically.</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Social Proof Card - Preserved original */}
+            <div className="rounded-[2rem] border border-slate-200 bg-white p-8 shadow-sm">
+              <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Social proof</p>
+              <p className="mt-4 text-xl font-semibold text-slate-950">Trusted by builders at Dev3pack</p>
+              <p className="mt-3 text-sm leading-7 text-slate-600">
+                Ruby combines group saving rituals with blockchain and AI, so circles move faster and earn yield while they save.
+              </p>
+              
+              {/* Trust badges */}
+              <div className="mt-6 flex flex-wrap gap-2">
+                {trustLogos.map((logo) => (
+                  <span key={logo} className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-600">
+                    <CheckCircle2 className="h-3 w-3 text-green-500" />
+                    {logo}
                   </span>
-                </span>
-                <span
-                  aria-hidden
-                  className="h-2.5 w-2.5 rounded-full bg-border-low transition group-hover:bg-primary/80"
-                />
-              </button>
-            ))}
-          </div>
+                ))}
+              </div>
+            </div>
 
-          <div className="flex flex-wrap items-center gap-3 border-t border-border-low pt-4 text-sm">
-            <span className="rounded-lg border border-border-low bg-cream px-3 py-2 font-mono text-xs">
-              {address ?? "No wallet connected"}
-            </span>
-            <button
-              onClick={() => disconnect()}
-              disabled={status !== "connected"}
-              className="inline-flex items-center gap-2 rounded-lg border border-border-low bg-card px-3 py-2 font-medium transition hover:-translate-y-0.5 hover:shadow-sm cursor-pointer disabled:cursor-not-allowed disabled:opacity-60"
-            >
-              Disconnect
-            </button>
-          </div>
+            {/* Stats Preview Card - New but matches dashboard style */}
+            <div className="rounded-[2rem] border border-slate-200 bg-gradient-to-br from-slate-900 to-slate-800 p-8 text-white shadow-sm">
+              <div className="flex items-center gap-2 mb-4">
+                <Wallet className="h-5 w-5 text-amber-400" />
+                <p className="text-xs font-semibold uppercase tracking-wider opacity-80">Live Stats</p>
+              </div>
+              <p className="text-3xl font-bold">$44,218.40</p>
+              <p className="text-sm opacity-80 mt-1">Total value locked</p>
+              <div className="mt-4 pt-4 border-t border-white/20">
+                <div className="flex justify-between text-sm">
+                  <span className="opacity-70">Active circles</span>
+                  <span className="font-semibold">4</span>
+                </div>
+                <div className="flex justify-between text-sm mt-2">
+                  <span className="opacity-70">Average APY</span>
+                  <span className="font-semibold text-green-400">7.24%</span>
+                </div>
+              </div>
+            </div>
+          </aside>
         </section>
 
+<<<<<<< HEAD
         <section className="w-full max-w-3xl space-y-4 rounded-2xl border border-border-low bg-card p-6 shadow-[0_20px_80px_-50px_rgba(0,0,0,0.35)]">
           <div className="space-y-1">
             <p className="text-lg font-semibold">Backend integration checks</p>
@@ -341,6 +530,25 @@ export default function Home() {
           )}
           {apiMessage && <p className="text-sm text-foreground">{apiMessage}</p>}
         </section>
+=======
+        {/* Footer - Preserved original */}
+        <footer className="mt-16 rounded-[2rem] border border-slate-200 bg-white p-8 text-sm text-slate-600 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <p>© 2026 Project Ruby — Dev3pack Hackathon</p>
+            <div className="flex flex-wrap items-center gap-4 text-slate-500">
+              <Button variant="ghost" size="sm" className="rounded-full text-slate-500 hover:bg-slate-100">
+                Terms
+              </Button>
+              <Button variant="ghost" size="sm" className="rounded-full text-slate-500 hover:bg-slate-100">
+                Privacy
+              </Button>
+              <Button variant="ghost" size="sm" className="rounded-full text-slate-500 hover:bg-slate-100">
+                Status
+              </Button>
+            </div>
+          </div>
+        </footer>
+>>>>>>> 5fb2cf0 (creation of auth pages and dashboard overview)
       </main>
     </div>
   );

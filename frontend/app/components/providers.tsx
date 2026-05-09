@@ -1,6 +1,7 @@
 "use client";
 
 import { SolanaProvider } from "@solana/react-hooks";
+import { PrivyProvider } from "@/providers/privy-provider";
 import { PropsWithChildren } from "react";
 
 import { autoDiscover, createClient } from "@solana/client";
@@ -14,5 +15,11 @@ const client = createClient({
 });
 
 export function Providers({ children }: PropsWithChildren) {
-  return <SolanaProvider client={client}>{children}</SolanaProvider>;
+  return (
+    <PrivyProvider>
+      <SolanaProvider client={client}>
+        {children}
+      </SolanaProvider>
+    </PrivyProvider>
+  );
 }
