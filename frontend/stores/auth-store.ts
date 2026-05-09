@@ -31,7 +31,7 @@ interface AuthActions {
   loginWithEmail: (email: string) => Promise<void>;
   loginWithWallet: () => Promise<void>;
   verifyPrivyToken: (privyToken: string, email?: string | null) => Promise<void>;
-  refreshSession: () => Promise<void>;
+  refreshSession: (options?: { silent?: boolean }) => Promise<void>;
   logout: () => Promise<void>;
   setLoading: (loading: boolean) => void;
   setHasHydrated: (hasHydrated: boolean) => void;
@@ -217,12 +217,17 @@ export const useAuthStore = create<AuthStore>()(
         }
       },
 
-      refreshSession: async () => {
+      refreshSession: async (options?: { silent?: boolean }) => {
         const token = get().token;
         if (!token) {
           return;
         }
-        set({ isLoading: true, error: null });
+        const silent = options?.silent ?? false;
+        if (silent) {
+          set({ error: null });
+        } else {
+          set({ isLoading: true, error: null });
+        }
         try {
           const principal = await apiFetch<AuthPrincipal>('/auth/me', { method: 'GET' }, token);
           set({

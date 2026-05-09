@@ -2,7 +2,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
 
 // Mock data
 const initialCircles = [
@@ -149,7 +148,6 @@ const createCircleOnChain = async (circleData: CircleFormData) => {
 };
 
 export default function CompleteDashboard() {
-  const router = useRouter();
   const [search, setSearch] = useState("");
   const [activeTab, setActiveTab] = useState("circles"); // circles, yield, activity
   const [selectedCircle, setSelectedCircle] = useState<Circle | null>(null);

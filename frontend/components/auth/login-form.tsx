@@ -24,7 +24,7 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
         title: "Wallet connected",
         description: "Your session was verified by the Ruby backend.",
       });
-      onSuccess?.();
+      queueMicrotask(() => onSuccess?.());
     } catch (error) {
       const message = error instanceof Error ? error.message : "Please try again.";
       setError(message);

@@ -14,6 +14,16 @@ export function PrivyLogin({ onSuccess, onError }: PrivyLoginProps) {
   const { identityToken } = useIdentityToken();
   const { verifyPrivyToken, isLoading } = useAuthStore();
   const verifiedTokenRef = useRef<string | null>(null);
+  const onSuccessRef = useRef(onSuccess);
+  const onErrorRef = useRef(onError);
+
+  useEffect(() => {
+    onSuccessRef.current = onSuccess;
+  }, [onSuccess]);
+
+  useEffect(() => {
+    onErrorRef.current = onError;
+  }, [onError]);
 
   useEffect(() => {
     if (!ready || !authenticated || !identityToken || verifiedTokenRef.current === identityToken) {
@@ -23,12 +33,14 @@ export function PrivyLogin({ onSuccess, onError }: PrivyLoginProps) {
     verifiedTokenRef.current = identityToken;
     const email = user?.email?.address ?? null;
     verifyPrivyToken(identityToken, email)
-      .then(() => onSuccess?.())
+      .then(() => {
+        onSuccessRef.current?.();
+      })
       .catch((error) => {
         verifiedTokenRef.current = null;
-        onError?.(error instanceof Error ? error.message : "Privy login failed");
+        onErrorRef.current?.(error instanceof Error ? error.message : "Privy login failed");
       });
-  }, [authenticated, identityToken, onError, onSuccess, ready, user, verifyPrivyToken]);
+  }, [authenticated, identityToken, ready, user, verifyPrivyToken]);
 
   return (
     <button
