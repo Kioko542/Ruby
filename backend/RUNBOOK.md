@@ -28,9 +28,12 @@ cp .env.example .env
 # Edit .env — set DATABASE_URL to your local Postgres
 ```
 
-### 4. Start a local Postgres (Docker)
+### 4. Start local services (Docker Compose)
 ```bash
-docker run --name ruby-pg -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=ruby_dev -p 5432:5432 -d postgres:16
+cd ..
+docker compose up -d
+# or from backend/
+make services-up
 ```
 
 ### 5. Run the server
@@ -47,6 +50,14 @@ curl http://localhost:8080/health
 # → {"service":"ruby-backend","status":"ok"}
 ```
 
+### Stop local services
+```bash
+cd ..
+docker compose down
+# or from backend/
+make services-down
+```
+
 ---
 
 ## Env Var Registry (Single Source of Truth)
@@ -59,6 +70,12 @@ curl http://localhost:8080/health
 | `SOLANA_RPC_URL` | web3 | Solana RPC endpoint |
 | `HELIUS_API_KEY` | web3 | Helius webhook key |
 | `SENDAI_API_KEY` | backend | AI agent key (Phase 3) |
+| `AUTH_JWT_SECRET` | backend | Signing secret for backend session JWT |
+| `AUTH_SESSION_TTL_MINUTES` | backend | Session expiry in minutes |
+| `AUTH_DOMAIN` | backend/frontend | Domain included in Phantom sign-in message |
+| `PRIVY_APP_ID` | auth | Privy app identifier (JWT audience) |
+| `PRIVY_ISSUER` | auth | Privy token issuer |
+| `PRIVY_JWKS_URL` | auth | Privy JWKS endpoint for JWT signature verification |
 
 > ⚠️ Do NOT add new env vars without updating this table and notifying dependent owners.
 
@@ -71,6 +88,11 @@ curl http://localhost:8080/health
 | GET | `/health` | 1 | backend |
 | GET | `/api/v1/groups` | 2 | backend |
 | GET | `/api/v1/groups/{id}/yield` | 3 | backend |
+| POST | `/api/v1/auth/phantom/nonce` | 1 | auth |
+| POST | `/api/v1/auth/phantom/verify` | 1 | auth |
+| POST | `/api/v1/auth/privy/verify` | 1 | auth |
+| GET | `/api/v1/auth/me` | 1 | auth |
+| POST | `/api/v1/auth/logout` | 1 | auth |
 | POST | `/api/v1/groups` | 2 | web3 DRI |
 | POST | `/api/v1/groups/{id}/contribute` | 2 | web3 DRI |
 | POST | `/api/v1/groups/{id}/yield` | 3 | agent writes |

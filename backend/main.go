@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 
+	"github.com/dev3pack/ruby/backend/internal/auth"
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
 
@@ -20,7 +21,7 @@ func main() {
 	database := db.New(cfg.DatabaseURL)
 	defer database.Close()
 
-	h := handlers.New(database)
+	h := handlers.New(database, cfg)
 
 	r := chi.NewRouter()
 
@@ -35,13 +36,31 @@ func main() {
 
 	// API v1 routes
 	r.Route("/api/v1", func(r chi.Router) {
+		r.Route("/auth", func(r chi.Router) {
+			r.Post("/phantom/nonce", h.BeginPhantomAuth)
+			r.Post("/phantom/verify", h.VerifyPhantomAuth)
+			r.Post("/privy/verify", h.VerifyPrivyAuth)
+
+			r.Group(func(r chi.Router) {
+				r.Use(auth.Middleware(h.Auth))
+				r.Get("/me", h.AuthMe)
+				r.Post("/logout", h.Logout)
+			})
+		})
+
 		// Groups
 		r.Get("/groups", h.ListGroups)
+		r.Post("/groups", h.CreateGroup)
+		r.Post("/groups/{groupID}/join", h.JoinGroup)
+		r.Post("/groups/{groupID}/contribute", h.Contribute)
+		r.Post("/groups/{groupID}/swig", h.ConfigureSwig)
+		r.Post("/groups/{groupID}/token", h.ConfigureToken2022)
+		r.Get("/groups/{groupID}/explorer", h.GetGroupExplorerLinks)
 		r.Get("/groups/{groupID}/yield", h.GetGroupYield)
-
-		// TODO Phase 2: POST /groups (create group — web3 DRI)
-		// TODO Phase 2: POST /groups/{groupID}/contribute (web3 DRI)
-		// TODO Phase 3: POST /groups/{groupID}/yield (agent writes here)
+		r.Post("/groups/{groupID}/yield", h.CreateYieldEvent)
+		r.Post("/agent/run", h.RunTreasuryAgent)
+		r.Get("/web3/balance", h.SolanaWalletBalance)
+		r.Post("/webhooks/helius", h.HeliusWebhook)
 	})
 
 	addr := fmt.Sprintf(":%s", cfg.Port)
