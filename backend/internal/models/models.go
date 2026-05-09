@@ -22,10 +22,30 @@ type Group struct {
 	GroupTokenMint  string    `bun:"group_token_mint" json:"group_token_mint"`
 	TransferHookPID string    `bun:"transfer_hook_pid" json:"transfer_hook_pid"`
 	OnChainPDA      string    `bun:"on_chain_pda" json:"on_chain_pda"`
+	// Savings cycle: members contribute against ActiveCycle until CycleDeadline; POST /cycle/end settles pro-rata shares.
+	ActiveCycle       int        `bun:"active_cycle,default:1" json:"active_cycle"`
+	CycleDeadline     *time.Time `bun:"cycle_deadline" json:"cycle_deadline,omitempty"`
+	PayoutReady       bool       `bun:"payout_ready,default:false" json:"payout_ready"`
+	LastSettledCycle  int        `bun:"last_settled_cycle,default:0" json:"last_settled_cycle"`
 	CreatedAt       time.Time `bun:"created_at,default:current_timestamp" json:"created_at"`
 	UpdatedAt       time.Time `bun:"updated_at,default:current_timestamp" json:"updated_at"`
 
 	Members []*Member `bun:"rel:has-many,join:id=group_id" json:"members,omitempty"`
+}
+
+// CycleSettlement stores per-member share after a cycle ends (mock payout for demo).
+type CycleSettlement struct {
+	bun.BaseModel `bun:"table:cycle_settlements,alias:cset"`
+
+	ID             int64     `bun:"id,pk,autoincrement" json:"id"`
+	GroupID        string    `bun:"group_id,notnull" json:"group_id"`
+	CycleNumber    int       `bun:"cycle_number,notnull" json:"cycle_number"`
+	MemberID       string    `bun:"member_id,notnull" json:"member_id"`
+	WalletAddress  string    `bun:"wallet_address,notnull" json:"wallet_address"`
+	ShareLamports  int64     `bun:"share_lamports,notnull" json:"share_lamports"`
+	VaultSnapshot  int64     `bun:"vault_snapshot,notnull" json:"vault_snapshot"`
+	TotalCyclePool int64     `bun:"total_cycle_pool,notnull" json:"total_cycle_pool"`
+	CreatedAt      time.Time `bun:"created_at,default:current_timestamp" json:"created_at"`
 }
 
 // ChainEvent stores webhook payload metadata from Helius.

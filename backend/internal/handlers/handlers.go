@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"strings"
@@ -17,6 +19,7 @@ import (
 	"github.com/dev3pack/ruby/backend/internal/models"
 	"github.com/dev3pack/ruby/backend/internal/realtime"
 	"github.com/dev3pack/ruby/backend/internal/treasury"
+	"github.com/dev3pack/ruby/backend/internal/webhook"
 	"github.com/dev3pack/ruby/backend/internal/web3"
 	"github.com/go-chi/chi/v5"
 	"github.com/uptrace/bun"
@@ -75,6 +78,50 @@ func (h *Handler) publish(eventType string, payload map[string]any) {
 		return
 	}
 	h.Hub.Broadcast(eventType, payload)
+}
+
+func (h *Handler) publishContributionWS(groupID string, payload map[string]any) {
+	if h.Hub == nil {
+		return
+	}
+	if payload == nil {
+		payload = map[string]any{}
+	}
+	payload["group_id"] = groupID
+	h.Hub.BroadcastGroup(groupID, "contribution", payload)
+}
+
+func (h *Handler) publishYieldDeposit(groupID string, payload map[string]any) {
+	if h.Hub == nil {
+		return
+	}
+	if payload == nil {
+		payload = map[string]any{}
+	}
+	payload["group_id"] = groupID
+	h.Hub.BroadcastGroup(groupID, "yield_deposit", payload)
+}
+
+func (h *Handler) publishVoteCast(groupID string, payload map[string]any) {
+	if h.Hub == nil {
+		return
+	}
+	if payload == nil {
+		payload = map[string]any{}
+	}
+	payload["group_id"] = groupID
+	h.Hub.BroadcastGroup(groupID, "vote_cast", payload)
+}
+
+func (h *Handler) publishCycleEnded(groupID string, payload map[string]any) {
+	if h.Hub == nil {
+		return
+	}
+	if payload == nil {
+		payload = map[string]any{}
+	}
+	payload["group_id"] = groupID
+	h.Hub.BroadcastGroup(groupID, "cycle_ended", payload)
 }
 
 func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
@@ -254,6 +301,7 @@ func (h *Handler) CreateGroup(w http.ResponseWriter, r *http.Request) {
 		req.MaxMembers = 10
 	}
 
+	deadline := time.Now().UTC().Add(7 * 24 * time.Hour)
 	group := &models.Group{
 		ID:              req.ID,
 		Name:            req.Name,
@@ -262,6 +310,8 @@ func (h *Handler) CreateGroup(w http.ResponseWriter, r *http.Request) {
 		MaxMembers:      req.MaxMembers,
 		SwigVaultAddr:   req.SwigVaultAddr,
 		OnChainPDA:      req.OnChainPDA,
+		ActiveCycle:     1,
+		CycleDeadline:   &deadline,
 		CreatedAt:       time.Now().UTC(),
 		UpdatedAt:       time.Now().UTC(),
 	}
@@ -282,7 +332,7 @@ type contributeRequest struct {
 	Amount        int64  `json:"amount"`
 	CycleNumber   int    `json:"cycle_number"`
 	TxSignature   string `json:"tx_signature"`
-	OnTime        bool   `json:"on_time"`
+	OnTime        *bool  `json:"on_time,omitempty"` // used only when group has no cycle_deadline
 }
 
 type joinGroupRequest struct {
@@ -551,7 +601,10 @@ func (h *Handler) Contribute(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var member models.Member
-	err := h.DB.NewSelect().Model(&member).Where("id = ?", req.MemberID).Scan(ctx)
+	err := h.DB.NewSelect().Model(&member).
+		Where("id = ?", req.MemberID).
+		Where("group_id = ?", groupID).
+		Scan(ctx)
 	if err != nil {
 		if !errors.Is(err, sql.ErrNoRows) {
 			writeError(w, http.StatusInternalServerError, "failed to fetch member")
@@ -569,23 +622,24 @@ func (h *Handler) Contribute(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	paidAt := time.Now().UTC()
 	contribution := &models.Contribution{
 		GroupID:     groupID,
 		MemberID:    req.MemberID,
 		Amount:      req.Amount,
 		CycleNumber: req.CycleNumber,
 		TxSignature: req.TxSignature,
-		PaidAt:      time.Now().UTC(),
+		PaidAt:      paidAt,
 	}
 	if _, err := h.DB.NewInsert().Model(contribution).Exec(ctx); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to save contribution")
 		return
 	}
 
+	creditDelta, creditReason := CreditDeltaForContribution(paidAt, group.CycleDeadline, req.OnTime)
+
 	member.TotalContributed += req.Amount
-	if req.OnTime {
-		member.CreditScore += 1
-	}
+	member.CreditScore = applyCreditDelta(member.CreditScore, creditDelta)
 	if _, err := h.DB.NewUpdate().
 		Model(&member).
 		Column("total_contributed", "credit_score").
@@ -610,18 +664,24 @@ func (h *Handler) Contribute(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusCreated, map[string]any{
-		"group_id":      groupID,
-		"member_id":     member.ID,
-		"amount":        req.Amount,
-		"vault_balance": group.VaultBalance,
-		"credit_score":  member.CreditScore,
-		"cycle_number":  group.CycleCount,
+		"group_id":       groupID,
+		"member_id":      member.ID,
+		"amount":         req.Amount,
+		"vault_balance":  group.VaultBalance,
+		"credit_score":   member.CreditScore,
+		"credit_delta":   creditDelta,
+		"credit_reason":  creditReason,
+		"cycle_number":   group.CycleCount,
+		"cycle_deadline": group.CycleDeadline,
 	})
-	h.publish("group.contribution", map[string]any{
-		"group_id":      groupID,
-		"member_id":     member.ID,
-		"amount":        req.Amount,
-		"vault_balance": group.VaultBalance,
+	h.publishContributionWS(groupID, map[string]any{
+		"group_id":       groupID,
+		"member_id":      member.ID,
+		"amount":         req.Amount,
+		"vault_balance":  group.VaultBalance,
+		"credit_delta":   creditDelta,
+		"credit_reason":  creditReason,
+		"credit_score":   member.CreditScore,
 	})
 }
 
@@ -675,7 +735,7 @@ func (h *Handler) CreateYieldEvent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusCreated, event)
-	h.publish("group.yield_event", map[string]any{
+	h.publishYieldDeposit(groupID, map[string]any{
 		"group_id":         groupID,
 		"amount_deposited": event.AmountDeposited,
 		"protocol":         event.Protocol,
@@ -827,13 +887,16 @@ func (h *Handler) runTreasuryAgentInternal(groupID string, dryRun bool) ([]*trea
 			continue
 		}
 		results = append(results, result)
-		h.publish("agent.run.result", map[string]any{
-			"group_id":           result.GroupID,
-			"status":             result.Status,
-			"selected_protocol":  result.SelectedProtocol,
-			"selected_apy":       result.SelectedAPY,
-			"deposited_lamports": result.DepositedLamports,
-		})
+		if result.Status == "executed" && result.DepositedLamports > 0 {
+			h.publishYieldDeposit(result.GroupID, map[string]any{
+				"group_id":           result.GroupID,
+				"status":             result.Status,
+				"selected_protocol":  result.SelectedProtocol,
+				"selected_apy":       result.SelectedAPY,
+				"deposited_lamports": result.DepositedLamports,
+				"source":             "treasury_agent",
+			})
+		}
 	}
 	return results, nil
 }
@@ -896,13 +959,18 @@ func (h *Handler) HeliusWebhook(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	rawBody, err := io.ReadAll(r.Body)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid body")
+		return
+	}
+
 	var payload map[string]any
-	if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+	if err := json.Unmarshal(rawBody, &payload); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
 
-	raw, _ := json.Marshal(payload)
 	meta := heliusWebhookPayload{
 		Type:      "unknown",
 		Signature: "",
@@ -922,7 +990,7 @@ func (h *Handler) HeliusWebhook(w http.ResponseWriter, r *http.Request) {
 		GroupID:    meta.GroupID,
 		EventType:  meta.Type,
 		Signature:  meta.Signature,
-		RawPayload: string(raw),
+		RawPayload: string(rawBody),
 		CreatedAt:  time.Now().UTC(),
 	}
 	if _, err := h.DB.NewInsert().Model(event).Exec(context.Background()); err != nil {
@@ -930,10 +998,46 @@ func (h *Handler) HeliusWebhook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	ctx := context.Background()
+	ops, err := webhook.ParseHeliusJSON(rawBody, h.Config.RubyProgramID)
+	if err != nil {
+		log.Printf("helius: parse ops: %v", err)
+	}
+	for _, op := range ops {
+		switch op.Kind {
+		case "contribute":
+			mid := strings.TrimSpace(op.MemberID)
+			if mid == "" {
+				mid = op.WalletAddress
+			}
+			if err := h.applyWebhookContribution(ctx, webhookContributionOp{
+				GroupID:       op.GroupID,
+				MemberID:      mid,
+				WalletAddress: op.WalletAddress,
+				Amount:        op.Amount,
+				CycleNumber:   op.CycleNumber,
+				Signature:     op.Signature,
+			}); err != nil {
+				log.Printf("helius: apply contribute: %v", err)
+			}
+		case "yield_event":
+			if err := h.applyWebhookYield(ctx, webhookYieldOp{
+				GroupID:         op.GroupID,
+				AmountDeposited: op.AmountDeposited,
+				Protocol:        op.Protocol,
+				APY:             op.APY,
+				Signature:       op.Signature,
+			}); err != nil {
+				log.Printf("helius: apply yield_event: %v", err)
+			}
+		}
+	}
+
 	writeJSON(w, http.StatusAccepted, map[string]string{"status": "accepted"})
 	h.publish("helius.webhook", map[string]any{
-		"group_id":   meta.GroupID,
-		"event_type": meta.Type,
-		"signature":  meta.Signature,
+		"group_id":    meta.GroupID,
+		"event_type":  meta.Type,
+		"signature":   meta.Signature,
+		"parsed_ops":  len(ops),
 	})
 }
