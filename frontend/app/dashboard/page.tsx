@@ -362,7 +362,7 @@ export default function RubyDashboard() {
             <div className="nav">
               <div className="nav-section">Main</div>
               <a className="ni active" onClick={() => handleNavigate("/dashboard")}><i className="ti ti-layout-dashboard" /> Overview</a>
-              <a className="ni" onClick={() => handleNavigate("/groups")}><i className="ti ti-users-group" /> My circles</a>
+              <a className="ni" onClick={() => handleNavigate("/create")}><i className="ti ti-users-group" /> My circles</a>
               <a className="ni" onClick={() => handleNavigate("/yield/history")}><i className="ti ti-chart-line" /> Yield history</a>
               <a className="ni" onClick={() => handleNavigate("/activity")}><i className="ti ti-bell" /> Activity</a>
               <div className="nav-section">Governance</div>
