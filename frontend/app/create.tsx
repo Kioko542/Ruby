@@ -93,6 +93,23 @@ const yieldHistory = [
   { week: "Week 6", yield: 112.30, total: 4935.24 },
 ];
 
+type CircleFormData = {
+  name: string;
+  description: string;
+  contributionAmount: string;
+  cycleLength: string;
+  protocol: string;
+};
+
+type Circle = (typeof initialCircles)[number];
+
+type CircleTransactionResult = {
+  success: boolean;
+  transactionId: string;
+  circleId: string;
+  circle: Circle;
+};
+
 const statusBadge = (status: string) => {
   if (status === "active") return <span className="badge badge-ok"><i className="ti ti-point-filled" />Active</span>;
   if (status === "rebalancing") return <span className="badge badge-blue"><i className="ti ti-refresh" />Rebalancing</span>;
@@ -101,8 +118,8 @@ const statusBadge = (status: string) => {
 };
 
 // Mock transaction function
-const createCircleOnChain = async (circleData: any) => {
-  return new Promise((resolve) => {
+const createCircleOnChain = async (circleData: CircleFormData) => {
+  return new Promise<CircleTransactionResult>((resolve) => {
     setTimeout(() => {
       const newId = `RU-${Math.floor(Math.random() * 900 + 100)}`;
       resolve({
@@ -135,12 +152,12 @@ export default function CompleteDashboard() {
   const router = useRouter();
   const [search, setSearch] = useState("");
   const [activeTab, setActiveTab] = useState("circles"); // circles, yield, activity
-  const [selectedCircle, setSelectedCircle] = useState<any>(null);
+  const [selectedCircle, setSelectedCircle] = useState<Circle | null>(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [circles, setCircles] = useState(initialCircles);
   const [step, setStep] = useState(1);
-  const [transactionResult, setTransactionResult] = useState<any>(null);
+  const [transactionResult, setTransactionResult] = useState<CircleTransactionResult | null>(null);
   const [formData, setFormData] = useState({
     name: "",
     description: "",
@@ -153,7 +170,7 @@ export default function CompleteDashboard() {
   useEffect(() => {
     const saved = localStorage.getItem('ruby_circles');
     if (saved) {
-      setCircles(JSON.parse(saved));
+      queueMicrotask(() => setCircles(JSON.parse(saved)));
     }
   }, []);
 

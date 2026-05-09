@@ -9,17 +9,21 @@ interface ProtectedRouteProps {
 }
 
 export function ProtectedRoute({ children }: ProtectedRouteProps) {
-  const { isAuthenticated } = useAuthStore();
+  const { isAuthenticated, isLoading, token, refreshSession } = useAuthStore();
   const router = useRouter();
 
   useEffect(() => {
+    if (token) {
+      void refreshSession();
+      return;
+    }
     if (!isAuthenticated) {
       router.push("/");
     }
-  }, [isAuthenticated, router]);
+  }, [isAuthenticated, refreshSession, router, token]);
 
-  if (!isAuthenticated) {
-    return null; // Or a loading spinner
+  if (isLoading || !isAuthenticated) {
+    return null;
   }
 
   return <>{children}</>;

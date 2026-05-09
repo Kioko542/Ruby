@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import { ProtectedRoute } from "@/components/auth/protected-route";
 
 const circles = [
   {
@@ -167,7 +168,8 @@ export default function RubyDashboard() {
   );
 
   return (
-    <>
+    <ProtectedRoute>
+      <>
       <link
         rel="stylesheet"
         href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css"
@@ -618,6 +620,7 @@ export default function RubyDashboard() {
           </div>
         </div>
       </div>
-    </>
+      </>
+    </ProtectedRoute>
   );
 }

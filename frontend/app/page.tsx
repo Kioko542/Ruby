@@ -3,6 +3,8 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { LoginForm } from "@/components/auth/login-form";
+import { useAuthStore } from "@/stores/auth-store";
 
 // Mock data
 const initialCircles = [
@@ -93,6 +95,23 @@ const yieldHistory = [
   { week: "Week 6", yield: 112.30, total: 4935.24 },
 ];
 
+type CircleFormData = {
+  name: string;
+  description: string;
+  contributionAmount: string;
+  cycleLength: string;
+  protocol: string;
+};
+
+type Circle = (typeof initialCircles)[number];
+
+type CircleTransactionResult = {
+  success: boolean;
+  transactionId: string;
+  circleId: string;
+  circle: Circle;
+};
+
 const statusBadge = (status: string) => {
   if (status === "active") return <span className="badge badge-ok"><i className="ti ti-point-filled" />Active</span>;
   if (status === "rebalancing") return <span className="badge badge-blue"><i className="ti ti-refresh" />Rebalancing</span>;
@@ -101,8 +120,8 @@ const statusBadge = (status: string) => {
 };
 
 // Mock transaction function
-const createCircleOnChain = async (circleData: any) => {
-  return new Promise((resolve) => {
+const createCircleOnChain = async (circleData: CircleFormData) => {
+  return new Promise<CircleTransactionResult>((resolve) => {
     setTimeout(() => {
       const newId = `RU-${Math.floor(Math.random() * 900 + 100)}`;
       resolve({
@@ -133,14 +152,15 @@ const createCircleOnChain = async (circleData: any) => {
 
 export default function CompleteDashboard() {
   const router = useRouter();
+  const { isAuthenticated, refreshSession } = useAuthStore();
   const [search, setSearch] = useState("");
   const [activeTab, setActiveTab] = useState("circles"); // circles, yield, activity
-  const [selectedCircle, setSelectedCircle] = useState<any>(null);
+  const [selectedCircle, setSelectedCircle] = useState<Circle | null>(null);
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [isProcessing, setIsProcessing] = useState(false);
   const [circles, setCircles] = useState(initialCircles);
   const [step, setStep] = useState(1);
-  const [transactionResult, setTransactionResult] = useState<any>(null);
+  const [transactionResult, setTransactionResult] = useState<CircleTransactionResult | null>(null);
   const [formData, setFormData] = useState({
     name: "",
     description: "",
@@ -153,9 +173,13 @@ export default function CompleteDashboard() {
   useEffect(() => {
     const saved = localStorage.getItem('ruby_circles');
     if (saved) {
-      setCircles(JSON.parse(saved));
+      queueMicrotask(() => setCircles(JSON.parse(saved)));
     }
   }, []);
+
+  useEffect(() => {
+    void refreshSession();
+  }, [refreshSession]);
 
   // Save circles to localStorage when updated
   useEffect(() => {
@@ -209,6 +233,24 @@ export default function CompleteDashboard() {
   const handleContribute = (circleId: string) => {
     alert(`Contribution flow for ${circleId} - Would connect to Stripe/solana pay`);
   };
+
+  if (!isAuthenticated) {
+    return (
+      <>
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@latest/tabler-icons.min.css" />
+        <div style={{
+          minHeight: "100vh",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: 24,
+          background: "#fafaf9",
+        }}>
+          <LoginForm onSuccess={() => router.push("/dashboard")} />
+        </div>
+      </>
+    );
+  }
 
   if (showCreateForm) {
     if (step === 3 && transactionResult) {

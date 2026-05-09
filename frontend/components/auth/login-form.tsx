@@ -4,80 +4,45 @@
 import { useState } from "react";
 import { useAuthStore } from "@/stores/auth-store";
 import { useToast } from "@/hooks/use-toast";
+import { PrivyLogin } from "@/components/auth/privy-login";
 
 interface LoginFormProps {
   onSuccess?: () => void;
 }
 
-type AuthStep = "capture" | "verify";
-
 export function LoginForm({ onSuccess }: LoginFormProps) {
-  const [contact, setContact] = useState("");
-  const [code, setCode] = useState("");
-  const [step, setStep] = useState<AuthStep>("capture");
   const [error, setError] = useState("");
-  const { loginWithEmail, loginWithWallet, isLoading } = useAuthStore();
+  const { loginWithWallet, isLoading } = useAuthStore();
   const { toast } = useToast();
-
-  const isEmail = contact.includes("@");
-  const isPhone = /^[0-9+\- ]+$/.test(contact) && contact.trim().length > 6;
-
-  const handleCapture = () => {
-    if (!contact.trim()) {
-      setError("Email or phone is required");
-      return;
-    }
-    if (!isEmail && !isPhone) {
-      setError("Enter a valid email or phone number");
-      return;
-    }
-    setError("");
-    setStep("verify");
-    toast({
-      title: "Code sent",
-      description: "Check your email or phone for the 6-digit verification code.",
-    });
-  };
-
-  const handleVerify = async () => {
-    if (code.trim().length !== 6) {
-      setError("Enter the 6-digit code");
-      return;
-    }
-    setError("");
-    try {
-      await loginWithEmail(contact);
-      toast({
-        title: "Welcome to Ruby",
-        description: "Your wallet is ready on Devnet.",
-      });
-      onSuccess?.();
-    } catch (error) {
-      toast({
-        title: "Verification failed",
-        description: "Please try again.",
-        variant: "destructive",
-      });
-    }
-  };
+  const hasPrivy = Boolean(process.env.NEXT_PUBLIC_PRIVY_APP_ID);
 
   const handleWalletLogin = async () => {
-    // API-READY: Replace with actual Phantom wallet adapter integration.
-    const mockWalletAddress = "7xK5...pLq9";
+    setError("");
     try {
-      await loginWithWallet(mockWalletAddress);
+      await loginWithWallet();
       toast({
-        title: "Phantom connected",
-        description: "Your existing wallet is now linked.",
+        title: "Wallet connected",
+        description: "Your session was verified by the Ruby backend.",
       });
       onSuccess?.();
     } catch (error) {
+      const message = error instanceof Error ? error.message : "Please try again.";
+      setError(message);
       toast({
         title: "Connection failed",
-        description: "Please try again.",
+        description: message,
         variant: "destructive",
       });
     }
+  };
+
+  const handlePrivyError = (message: string) => {
+    setError(message);
+    toast({
+      title: "Verification failed",
+      description: message,
+      variant: "destructive",
+    });
   };
 
   return (
@@ -249,94 +214,22 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
         <div className="ruby-card-header">
           <div className="ruby-card-title">Ruby onboarding</div>
           <div className="ruby-card-description">
-            {step === "capture" 
-              ? "Enter your email or phone to start saving together." 
-              : "Enter the 6-digit code we sent you."}
+            Sign in with Privy email or verify a Solana wallet through the Ruby backend.
           </div>
         </div>
         <div className="ruby-card-content">
-          {step === "capture" ? (
-            <div>
-              <div className="ruby-form-group">
-                <label className="ruby-label">Email or phone</label>
-                <input
-                  type="text"
-                  placeholder="e.g., amara@ruby.so or +254 712 345 678"
-                  className={`ruby-input ${error ? 'error' : ''}`}
-                  value={contact}
-                  onChange={(e) => setContact(e.target.value)}
-                  disabled={isLoading}
-                />
-                {error && (
-                  <div className="ruby-error">
-                    <i className="ti ti-alert-circle" style={{ fontSize: 11 }} />
-                    {error}
-                  </div>
-                )}
-              </div>
-              <button 
-                className="ruby-btn ruby-btn-primary" 
-                onClick={handleCapture} 
-                disabled={isLoading}
-              >
-                {isLoading ? (
-                  <>
-                    <div className="loading-spinner" />
-                    Sending code...
-                  </>
-                ) : (
-                  <>
-                    <i className="ti ti-mail" style={{ fontSize: 13 }} />
-                    Send verification code
-                  </>
-                )}
-              </button>
-            </div>
+          {hasPrivy ? (
+            <PrivyLogin onSuccess={onSuccess} onError={handlePrivyError} />
           ) : (
-            <div>
-              <div className="ruby-form-group">
-                <label className="ruby-label">Verification code</label>
-                <input
-                  type="text"
-                  placeholder="Enter 6-digit code"
-                  className={`ruby-input ${error ? 'error' : ''}`}
-                  value={code}
-                  onChange={(e) => setCode(e.target.value)}
-                  disabled={isLoading}
-                  maxLength={6}
-                />
-                {error && (
-                  <div className="ruby-error">
-                    <i className="ti ti-alert-circle" style={{ fontSize: 11 }} />
-                    {error}
-                  </div>
-                )}
-              </div>
-              <button 
-                className="ruby-btn ruby-btn-primary" 
-                onClick={handleVerify} 
-                disabled={isLoading}
-              >
-                {isLoading ? (
-                  <>
-                    <div className="loading-spinner" />
-                    Verifying...
-                  </>
-                ) : (
-                  <>
-                    <i className="ti ti-check" style={{ fontSize: 13 }} />
-                    Verify and continue
-                  </>
-                )}
-              </button>
-              <button 
-                className="ruby-btn ruby-btn-ghost" 
-                onClick={() => setStep("capture")}
-                style={{ marginTop: 12 }}
-              >
-                <i className="ti ti-arrow-left" style={{ fontSize: 13 }} />
-                Use a different email or phone
-              </button>
+            <div className="ruby-footnote" style={{ marginTop: 0, marginBottom: 12 }}>
+              Set NEXT_PUBLIC_PRIVY_APP_ID to enable Privy email login.
+            </div>
+          )}
+
+          {error && (
+            <div className="ruby-error" style={{ marginTop: 12 }}>
+              <i className="ti ti-alert-circle" style={{ fontSize: 11 }} />
+              {error}
             </div>
           )}
 
