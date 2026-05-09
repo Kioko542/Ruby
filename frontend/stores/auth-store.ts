@@ -8,6 +8,21 @@ const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL ??
   `${process.env.NEXT_PUBLIC_BACKEND_URL ?? 'http://localhost:8080'}/api/v1`;
 
+/**
+ * Ruby sessions are Bearer JWTs kept in localStorage via zustand persist (`auth-storage`),
+ * not browser cookies. If `/auth/me` fails for network/CORS reasons, keep the token so
+ * the session still “sticks” until the server explicitly returns 401/403.
+ */
+export class ApiRequestError extends Error {
+  readonly status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = 'ApiRequestError';
+    this.status = status;
+  }
+}
+
 interface AuthPrincipal {
   session_id: string;
   user_id: string;
@@ -118,7 +133,7 @@ async function apiFetch<T>(
     } catch {
       // Keep the status-based fallback when the backend does not return JSON.
     }
-    throw new Error(message);
+    throw new ApiRequestError(message, response.status);
   }
 
   return response.json() as Promise<T>;
@@ -271,15 +286,29 @@ export const useAuthStore = create<AuthStore>()(
             error: null,
           });
         } catch (error) {
-          set({
-            token: null,
-            principal: null,
-            walletAddress: null,
-            email: null,
-            isAuthenticated: false,
-            isLoading: false,
-            error: error instanceof Error ? error.message : 'Session refresh failed',
-          });
+          const status = error instanceof ApiRequestError ? error.status : 0;
+          const sessionRejected = status === 401 || status === 403;
+          if (sessionRejected) {
+            set({
+              token: null,
+              principal: null,
+              walletAddress: null,
+              email: null,
+              isAuthenticated: false,
+              isLoading: false,
+              error: silent ? null : error instanceof Error ? error.message : 'Session refresh failed',
+            });
+          } else {
+            set({
+              isLoading: false,
+              error:
+                silent
+                  ? null
+                  : error instanceof Error
+                    ? error.message
+                    : 'Session refresh failed',
+            });
+          }
         }
       },
 
