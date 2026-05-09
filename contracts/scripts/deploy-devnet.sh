@@ -11,7 +11,9 @@ echo "Deploying ruby_protocol to devnet..."
 anchor deploy --provider.cluster devnet
 
 PROGRAM_ID="$(solana address -k target/deploy/ruby_protocol-keypair.json)"
-IDL_PATH="$(pwd)/target/idl/ruby_protocol.json"
+mkdir -p idl
+cp -f target/idl/ruby_protocol.json idl/ruby_protocol.json
+IDL_PATH="$(pwd)/idl/ruby_protocol.json"
 
 echo ""
 echo "Deployment complete."

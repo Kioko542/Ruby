@@ -1,6 +1,6 @@
 use anchor_lang::prelude::*;
 
-declare_id!("RuBy111111111111111111111111111111111111111");
+declare_id!("BsHiSX9NmkNMTYP8UcAY71aKVZwcCgA2Tea1tmgeQbdv");
 
 #[program]
 pub mod ruby_protocol {
@@ -179,12 +179,13 @@ pub struct Contribute<'info> {
     pub member_wallet: Signer<'info>,
     #[account(mut)]
     pub group: Account<'info, GroupAccount>,
-    #[account(mut, has_one = group, has_one = wallet @ RubyError::MemberWalletMismatch)]
+    #[account(mut, has_one = group, constraint = member.wallet == member_wallet.key() @ RubyError::MemberWalletMismatch)]
     pub member: Account<'info, MemberAccount>,
 }
 
 #[derive(Accounts)]
 pub struct CreateSwigProposal<'info> {
+    #[account(mut)]
     pub member_wallet: Signer<'info>,
     pub group: Account<'info, GroupAccount>,
     pub member: Account<'info, MemberAccount>,
@@ -201,6 +202,7 @@ pub struct CreateSwigProposal<'info> {
 
 #[derive(Accounts)]
 pub struct ApproveSwigProposal<'info> {
+    #[account(mut)]
     pub member_wallet: Signer<'info>,
     pub group: Account<'info, GroupAccount>,
     pub member: Account<'info, MemberAccount>,
@@ -219,6 +221,7 @@ pub struct ApproveSwigProposal<'info> {
 
 #[derive(Accounts)]
 pub struct CreateLoanRequest<'info> {
+    #[account(mut)]
     pub borrower_wallet: Signer<'info>,
     pub group: Account<'info, GroupAccount>,
     pub member: Account<'info, MemberAccount>,
@@ -235,6 +238,7 @@ pub struct CreateLoanRequest<'info> {
 
 #[derive(Accounts)]
 pub struct VoteLoanRequest<'info> {
+    #[account(mut)]
     pub member_wallet: Signer<'info>,
     pub group: Account<'info, GroupAccount>,
     pub member: Account<'info, MemberAccount>,
@@ -253,6 +257,7 @@ pub struct VoteLoanRequest<'info> {
 
 #[derive(Accounts)]
 pub struct CreateBlinkAction<'info> {
+    #[account(mut)]
     pub member_wallet: Signer<'info>,
     pub group: Account<'info, GroupAccount>,
     pub member: Account<'info, MemberAccount>,
@@ -276,6 +281,7 @@ pub struct ExecuteBlinkAction<'info> {
 
 #[derive(Accounts)]
 pub struct RecordYieldEvent<'info> {
+    #[account(mut)]
     pub agent_wallet: Signer<'info>,
     pub group: Account<'info, GroupAccount>,
     #[account(

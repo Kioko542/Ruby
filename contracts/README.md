@@ -29,7 +29,7 @@ cd contracts
 ./scripts/deploy-devnet.sh
 ```
 
-After deploy, copy `RUBY_PROGRAM_ID` and `ANCHOR_IDL_PATH` into `backend/.env`.
+After deploy, copy `RUBY_PROGRAM_ID` into `backend/.env`. The generated IDL is mirrored to `contracts/idl/ruby_protocol.json` (used by `deploy-devnet.sh`); point `ANCHOR_IDL_PATH` at that file or at `target/idl/ruby_protocol.json` after a local `anchor build`.
 
 ## Backend mapping
 
