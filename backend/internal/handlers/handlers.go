@@ -251,6 +251,9 @@ func (h *Handler) GetGroups(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "failed to fetch groups")
 		return
 	}
+	if groups == nil {
+		groups = []models.Group{}
+	}
 
 	writeJSON(w, http.StatusOK, groups)
 }

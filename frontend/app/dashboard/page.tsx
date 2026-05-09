@@ -50,7 +50,7 @@ function DashboardInner() {
     setErr(null);
     try {
       const data = await fetchGroups();
-      setGroups(data);
+      setGroups(Array.isArray(data) ? data : []);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Failed to load circles");
     } finally {

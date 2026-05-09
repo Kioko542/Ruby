@@ -76,7 +76,8 @@ async function parseError(res: Response): Promise<string> {
 export async function fetchGroups(): Promise<Group[]> {
   const res = await fetch(`${API_BASE}/groups`, { headers: headers() });
   if (!res.ok) throw new Error(await parseError(res));
-  return res.json() as Promise<Group[]>;
+  const data: unknown = await res.json();
+  return Array.isArray(data) ? (data as Group[]) : [];
 }
 
 export async function fetchChainEvents(limit = 50): Promise<ChainEvent[]> {
