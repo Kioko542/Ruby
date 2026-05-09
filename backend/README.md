@@ -82,6 +82,22 @@ make services-down
 | `TOKEN_2022_PROGRAM_ID` | Token-2022 program ID |
 | `ANCHOR_IDL_PATH` | Path to generated Anchor IDL JSON |
 
+## Production: database migrations
+
+On startup, `db.Open` runs **`EnsureSchema`** (idempotent): `CREATE TABLE IF NOT EXISTS` for all models, then additive `ALTER TABLE groups ... ADD COLUMN IF NOT EXISTS` for cycle fields.
+
+- If **migrations fail**, the process **exits before listening** — the deployment should fail or remain unhealthy until `DATABASE_URL` and permissions are correct.
+- After a successful migrate, the server logs: `database migrations completed successfully`.
+
+**Manual migrate** (same binary as the server — useful for Render SSH or local ops):
+
+```bash
+cd backend
+DATABASE_URL="postgres://..." ./ruby-server migrate
+```
+
+**Readiness**: `GET /health/ready` pings Postgres and returns **503** if the DB is down. In the [Render dashboard](https://dashboard.render.com/), set **Health Check Path** to `/health/ready` if you want instances marked live only when the database answers (optional; default `/health` only checks the process).
+
 ## API Overview
 
 Base path: `/api/v1`

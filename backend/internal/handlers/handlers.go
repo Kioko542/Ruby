@@ -131,6 +131,24 @@ func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// HealthReady returns 200 only when Postgres is reachable (post-migration).
+func (h *Handler) HealthReady(w http.ResponseWriter, r *http.Request) {
+	if h.DB == nil {
+		writeError(w, http.StatusServiceUnavailable, "database not configured")
+		return
+	}
+	ctx := r.Context()
+	if err := h.DB.PingContext(ctx); err != nil {
+		writeError(w, http.StatusServiceUnavailable, "database unavailable")
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{
+		"service": "ruby-backend",
+		"status":  "ready",
+		"db":      "ok",
+	})
+}
+
 type authNonceRequest struct {
 	WalletAddress string `json:"wallet_address"`
 }

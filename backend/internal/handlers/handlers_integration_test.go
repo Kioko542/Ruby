@@ -37,6 +37,20 @@ func TestHealthEndpoint(t *testing.T) {
 	}
 }
 
+func TestHealthReadyWithoutDB(t *testing.T) {
+	h := &Handler{}
+	r := chi.NewRouter()
+	r.Get("/health/ready", h.HealthReady)
+
+	req := httptest.NewRequest(http.MethodGet, "/health/ready", nil)
+	rr := httptest.NewRecorder()
+	r.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected 503 without DB, got %d body=%s", rr.Code, rr.Body.String())
+	}
+}
+
 func TestSolanaWalletBalanceEndpoint(t *testing.T) {
 	rpc := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

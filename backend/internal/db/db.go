@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"log"
 	"strings"
 
 	"github.com/dev3pack/ruby/backend/internal/models"
@@ -23,7 +22,10 @@ func Open(dsn string) (*bun.DB, error) {
 		return nil, err
 	}
 	database := bun.NewDB(sqldb, pgdialect.New())
-	ensureSchema(database)
+	if err := EnsureSchema(database); err != nil {
+		_ = database.Close()
+		return nil, err
+	}
 	return database, nil
 }
 
@@ -36,7 +38,8 @@ func New(dsn string) *bun.DB {
 	return database
 }
 
-func ensureSchema(database *bun.DB) {
+// EnsureSchema creates missing tables and applies additive DDL (idempotent). Safe on every deploy.
+func EnsureSchema(database *bun.DB) error {
 	ctx := context.Background()
 	for _, model := range []any{
 		(*models.Group)(nil),
@@ -57,13 +60,13 @@ func ensureSchema(database *bun.DB) {
 			Model(model).
 			IfNotExists().
 			Exec(ctx); err != nil {
-			log.Fatalf("failed to ensure schema: %v", err)
+			return fmt.Errorf("create table: %w", err)
 		}
 	}
-	migrateGroupsCycleColumns(ctx, database)
+	return migrateGroupsCycleColumns(ctx, database)
 }
 
-func migrateGroupsCycleColumns(ctx context.Context, database *bun.DB) {
+func migrateGroupsCycleColumns(ctx context.Context, database *bun.DB) error {
 	stmts := []string{
 		`ALTER TABLE groups ADD COLUMN IF NOT EXISTS active_cycle INTEGER NOT NULL DEFAULT 1`,
 		`ALTER TABLE groups ADD COLUMN IF NOT EXISTS cycle_deadline TIMESTAMPTZ`,
@@ -72,7 +75,8 @@ func migrateGroupsCycleColumns(ctx context.Context, database *bun.DB) {
 	}
 	for _, q := range stmts {
 		if _, err := database.ExecContext(ctx, q); err != nil {
-			log.Fatalf("failed to migrate groups cycle columns: %v", err)
+			return fmt.Errorf("migrate groups columns: %w", err)
 		}
 	}
+	return nil
 }

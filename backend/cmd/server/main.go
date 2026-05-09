@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/dev3pack/ruby/backend/internal/auth"
@@ -18,8 +20,36 @@ import (
 )
 
 func main() {
+	if len(os.Args) >= 2 && os.Args[1] == "migrate" {
+		runMigrateCLI()
+		return
+	}
+	runServer()
+}
+
+func runMigrateCLI() {
 	cfg := config.Load()
-	database := db.New(cfg.DatabaseURL)
+	if strings.TrimSpace(cfg.DatabaseURL) == "" {
+		log.Fatal("migrate: DATABASE_URL is required")
+	}
+	database, err := db.Open(cfg.DatabaseURL)
+	if err != nil {
+		log.Fatalf("migrate: %v", err)
+	}
+	defer database.Close()
+	log.Println("migrate: database migrations completed successfully")
+}
+
+func runServer() {
+	cfg := config.Load()
+
+	database, err := db.Open(cfg.DatabaseURL)
+	if err != nil {
+		log.Fatalf("database setup failed (migrations): %v", err)
+	}
+	defer database.Close()
+	log.Println("database migrations completed successfully")
+
 	h := handlers.NewHandler(database, cfg)
 
 	r := chi.NewRouter()
@@ -29,6 +59,7 @@ func main() {
 	r.Use(appMiddleware.Logger)
 
 	r.Get("/health", h.Health)
+	r.Get("/health/ready", h.HealthReady)
 	r.Get("/api/v1/ws", h.EventsWebSocket)
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Route("/auth", func(r chi.Router) {
