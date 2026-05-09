@@ -10,7 +10,7 @@ interface HeaderProps {
 }
 
 export function Header({ onLoginClick }: HeaderProps) {
-  const { isAuthenticated, walletAddress, email, logout } = useAuthStore();
+  const { token, walletAddress, email, logout } = useAuthStore();
 
   return (
     <header className="sticky top-0 z-20 border-b border-slate-200/70 bg-white/90 backdrop-blur-xl">
@@ -28,7 +28,7 @@ export function Header({ onLoginClick }: HeaderProps) {
             <span className="rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">
               Devnet
             </span>
-            {isAuthenticated ? (
+            {token ? (
               <div className="flex items-center gap-3 rounded-full border border-slate-200 bg-slate-50 px-4 py-2">
                 <div className="flex items-center gap-2 text-sm text-slate-700">
                   <User className="h-4 w-4" />

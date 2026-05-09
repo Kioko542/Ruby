@@ -11,7 +11,7 @@ interface ProtectedRouteProps {
 }
 
 export function ProtectedRoute({ children }: ProtectedRouteProps) {
-  const { hasHydrated, isAuthenticated, token, refreshSession } = useAuthStore();
+  const { hasHydrated, token, refreshSession } = useAuthStore();
   const router = useRouter();
   const didSilentRefresh = useRef(false);
 
@@ -20,7 +20,7 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
       return;
     }
 
-    if (!token || !isAuthenticated) {
+    if (!token) {
       didSilentRefresh.current = false;
       router.replace(LOGIN_PATH);
       return;
@@ -30,13 +30,13 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
       didSilentRefresh.current = true;
       void refreshSession({ silent: true });
     }
-  }, [hasHydrated, isAuthenticated, refreshSession, router, token]);
+  }, [hasHydrated, refreshSession, router, token]);
 
   if (!hasHydrated) {
     return <AuthLoading label="Restoring session…" />;
   }
 
-  if (!token || !isAuthenticated) {
+  if (!token) {
     return <AuthLoading label="Redirecting…" />;
   }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useLayoutEffect } from "react";
 import { useRouter } from "next/navigation";
 import { LoginForm } from "@/components/auth/login-form";
 import { AuthLoading } from "@/components/auth/auth-loading";
@@ -9,19 +9,19 @@ import { AUTH_REDIRECT_PATH } from "@/lib/auth-paths";
 
 export default function HomePage() {
   const router = useRouter();
-  const { hasHydrated, isAuthenticated, token } = useAuthStore();
+  const { hasHydrated, token } = useAuthStore();
 
-  useEffect(() => {
-    if (hasHydrated && isAuthenticated && token) {
+  useLayoutEffect(() => {
+    if (hasHydrated && token) {
       router.replace(AUTH_REDIRECT_PATH);
     }
-  }, [hasHydrated, isAuthenticated, token, router]);
+  }, [hasHydrated, token, router]);
 
   if (!hasHydrated) {
     return <AuthLoading />;
   }
 
-  if (isAuthenticated && token) {
+  if (token) {
     return <AuthLoading label="Opening dashboard…" />;
   }
 

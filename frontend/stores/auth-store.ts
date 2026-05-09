@@ -364,6 +364,19 @@ export const useAuthStore = create<AuthStore>()(
     }),
     {
       name: 'auth-storage',
+      merge: (persistedState, currentState) => {
+        const p = (persistedState ?? {}) as Partial<
+          Pick<AuthState, 'walletAddress' | 'email' | 'token' | 'principal' | 'isAuthenticated'>
+        >;
+        const merged = {
+          ...currentState,
+          ...p,
+        };
+        if (merged.token) {
+          merged.isAuthenticated = true;
+        }
+        return merged;
+      },
       onRehydrateStorage: () => (state) => {
         state?.setHasHydrated(true);
       },
