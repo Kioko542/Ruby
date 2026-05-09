@@ -255,7 +255,7 @@ export function LoginForm({ onSuccess }: LoginFormProps) {
             ) : (
               <>
                 <i className="ti ti-wallet" style={{ fontSize: 13 }} />
-                Connect existing Phantom
+                Connect Solana wallet
               </>
             )}
           </button>

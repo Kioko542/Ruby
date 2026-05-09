@@ -50,19 +50,48 @@ type PhantomNonceResponse = {
   message: string;
 };
 
-type PhantomProvider = {
+/** Any injected wallet that can sign a SIWS-style message (Phantom, Backpack, etc.) */
+type SolanaAuthProvider = {
   isPhantom?: boolean;
-  connect: () => Promise<{ publicKey: { toString: () => string } }>;
+  connect: (opts?: { onlyIfTrusted?: boolean }) => Promise<{ publicKey: { toString: () => string } }>;
   signMessage: (
     message: Uint8Array,
-    display?: 'utf8'
+    display?: 'utf8',
   ) => Promise<{ signature: Uint8Array }>;
 };
 
 declare global {
   interface Window {
-    solana?: PhantomProvider;
+    solana?: SolanaAuthProvider;
+    /** Phantom documents this as the stable entrypoint; `window.solana` may be another wallet. */
+    phantom?: { solana?: SolanaAuthProvider };
   }
+}
+
+function isSolanaAuthProvider(x: unknown): x is SolanaAuthProvider {
+  if (!x || typeof x !== 'object') return false;
+  const o = x as Record<string, unknown>;
+  return typeof o.connect === 'function' && typeof o.signMessage === 'function';
+}
+
+function getSolanaAuthProvider(): SolanaAuthProvider | null {
+  if (typeof window === 'undefined') return null;
+  const phantom = window.phantom?.solana;
+  if (isSolanaAuthProvider(phantom)) return phantom;
+  const injected = window.solana;
+  if (isSolanaAuthProvider(injected)) return injected;
+  return null;
+}
+
+function allowEphemeralDevWalletLogin(): boolean {
+  if (typeof window === 'undefined') return false;
+  if (process.env.NODE_ENV !== 'production') return true;
+  const h = window.location.hostname;
+  if (['localhost', '127.0.0.1', '::1'].includes(h)) return true;
+  if (h.endsWith('.local')) return true;
+  // Private LAN (e.g. next start + http://192.168.x.x:3000)
+  if (/^10\.|^172\.(1[6-9]|2[0-9]|3[01])\.|^192\.168\./.test(h)) return true;
+  return process.env.NEXT_PUBLIC_ALLOW_EPHEMERAL_WALLET_LOGIN === 'true';
 }
 
 async function apiFetch<T>(
@@ -126,14 +155,20 @@ function sessionState(session: AuthSessionResponse, email?: string | null) {
   };
 }
 
-async function signWithPhantomWallet() {
-  const provider = window.solana;
-  if (!provider?.isPhantom || !provider.signMessage) {
+async function signWithInjectedSolanaWallet() {
+  const provider = getSolanaAuthProvider();
+  if (!provider) {
     return null;
   }
 
-  const connection = await provider.connect();
-  const walletAddress = connection.publicKey.toString();
+  let res: { publicKey: { toString: () => string } };
+  try {
+    res = await provider.connect({ onlyIfTrusted: false });
+  } catch {
+    res = await provider.connect();
+  }
+  const walletAddress = res.publicKey.toString();
+
   const challenge = await beginPhantomAuth(walletAddress);
   const encodedMessage = new TextEncoder().encode(challenge.message);
   const { signature } = await provider.signMessage(encodedMessage, 'utf8');
@@ -147,12 +182,10 @@ async function signWithPhantomWallet() {
 }
 
 async function signWithLocalDevWallet() {
-  const isLocalHost =
-    typeof window !== 'undefined' &&
-    ['localhost', '127.0.0.1', '::1'].includes(window.location.hostname);
-
-  if (process.env.NODE_ENV === 'production' && !isLocalHost) {
-    throw new Error('Phantom wallet is required');
+  if (!allowEphemeralDevWalletLogin()) {
+    throw new Error(
+      'No Solana wallet detected. Install Phantom (phantom.app), refresh this page, and approve the connection. If Phantom is installed, try disabling other wallet extensions that override window.solana.',
+    );
   }
 
   const keypair = Keypair.generate();
@@ -192,7 +225,7 @@ export const useAuthStore = create<AuthStore>()(
         try {
           const session =
             typeof window !== 'undefined'
-              ? (await signWithPhantomWallet()) ?? (await signWithLocalDevWallet())
+              ? (await signWithInjectedSolanaWallet()) ?? (await signWithLocalDevWallet())
               : await signWithLocalDevWallet();
           set(sessionState(session));
         } catch (error) {
